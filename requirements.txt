@@ -1,0 +1,8 @@
+pandas
+requests
+firebase-admin
+pytz
+openpyxl
+python-docx
+PyPDF2
+mammoth

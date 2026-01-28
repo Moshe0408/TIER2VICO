@@ -1,0 +1,23 @@
+# התעלם מהכל ברירת מחדל
+*
+
+# אל תתעלם מהקבצים האלו (Whitelist)
+!.gitignore
+!Dashboard_App.py
+!guides_db.json
+!integrations_db.json
+!vercel.json
+!requirements.txt
+!uploads/
+!uploads/*
+
+# אל תתעלם מהתיקייה עצמה אבל אולי תרצה להתעלם מהתוכן שלה בעתיד
+# אם אתה רוצה להעלות גם את התמונות שכבר קיימות, השאר את !uploads/*
+
+# התעלם מתיקיות פנימיות וזבל של מערכת הפעלה
+__pycache__/
+.DS_Store
+Thumbs.db
+.vscode/
+.venv/
+venv/

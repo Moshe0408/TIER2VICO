@@ -1,0 +1,421 @@
+[
+    {
+        "Customer": "Dorix Aroma",
+        "Device": "P400",
+        "GW": "APG",
+        "Integrator": "Gal Shalev",
+        "PM": "Adir Tzafar",
+        "Version": "",
+        "Status": "IN PROGRESS"
+    },
+    {
+        "Customer": "LCS Lin",
+        "Device": "P400",
+        "GW": "APG",
+        "Integrator": "Gal Shalev",
+        "PM": "Almog Rubin",
+        "Version": "",
+        "Status": "IN PROGRESS"
+    },
+    {
+        "Customer": "Startup Booster Soglowek",
+        "Device": "UX700",
+        "GW": "TGW",
+        "Integrator": "Gal Shalev",
+        "PM": "Almog Rubin",
+        "Version": "5.336.2",
+        "Status": "IN PROGRESS"
+    },
+    {
+        "Customer": "Startup Booster A.D. Food&Holdings",
+        "Device": "UX700",
+        "GW": "TGW",
+        "Integrator": "Gal Shalev",
+        "PM": "Irit Avni",
+        "Version": "5.336.2",
+        "Status": "IN PROGRESS"
+    },
+    {
+        "Customer": "Balamuth",
+        "Device": "P400",
+        "GW": "APG",
+        "Integrator": "Gal Shalev",
+        "PM": "Almog Rubin",
+        "Version": "3.7.7.0002",
+        "Status": "IN PROGRESS"
+    },
+    {
+        "Customer": "EVLINK",
+        "Device": "UX700",
+        "GW": "TGW",
+        "Integrator": "Gal Shalev",
+        "PM": "Almog Rubin",
+        "Version": "5.340.10",
+        "Status": "IN PROGRESS"
+    },
+    {
+        "Customer": "Afik",
+        "Device": "UX700",
+        "GW": "TGW",
+        "Integrator": "Gal Shalev",
+        "PM": "Almog Rubin",
+        "Version": "5.340.11",
+        "Status": "IN PROGRESS"
+    },
+    {
+        "Customer": "Lincoln4 sale",
+        "Device": "P400",
+        "GW": "APG",
+        "Integrator": "Gal Shalev",
+        "PM": "Almog Rubin",
+        "Version": "3.7.7.0002",
+        "Status": "IN PROGRESS"
+    },
+    {
+        "Customer": "Assembly",
+        "Device": "UX700",
+        "GW": "TGW",
+        "Integrator": "Gal Shalev",
+        "PM": "Irit Avni",
+        "Version": "",
+        "Status": "IN PROGRESS"
+    },
+    {
+        "Customer": "משרד החקלאות (מרכב\"ה מטאור)",
+        "Device": "P400",
+        "GW": "CG",
+        "Integrator": "Gal Shalev",
+        "PM": "Irit Avni",
+        "Version": "3.7.8.0000",
+        "Status": "IN PROGRESS"
+    },
+    {
+        "Customer": "משרד הכלכלה",
+        "Device": "P400",
+        "GW": "CG",
+        "Integrator": "Gal Shalev",
+        "PM": "Irit Avni",
+        "Version": "",
+        "Status": "IN PROGRESS"
+    },
+    {
+        "Customer": "Hospitals - SHEBA - NAMER",
+        "Device": "P400",
+        "GW": "PC",
+        "Integrator": "Gal Shalev",
+        "PM": "Adir Tzafar",
+        "Version": "",
+        "Status": "IN PROGRESS"
+    },
+    {
+        "Customer": "Hospitals - Aviv",
+        "Device": "P400",
+        "GW": "ABS",
+        "Integrator": "Gal Shalev",
+        "PM": "Adir Tzafar",
+        "Version": "",
+        "Status": "IN PROGRESS"
+    },
+    {
+        "Customer": "Hospitals - NAMER",
+        "Device": "P400",
+        "GW": "PC",
+        "Integrator": "Gal Shalev",
+        "PM": "Adir Tzafar",
+        "Version": "",
+        "Status": "IN PROGRESS"
+    },
+    {
+        "Customer": "רמ\"י",
+        "Device": "P400",
+        "GW": "CG",
+        "Integrator": "Gal Shalev",
+        "PM": "Adir Tzafar",
+        "Version": "",
+        "Status": "IN PROGRESS"
+    },
+    {
+        "Customer": "הנהלת בתי המשפט",
+        "Device": "P400",
+        "GW": "CG",
+        "Integrator": "Gal Shalev",
+        "PM": "Adir Tzafar",
+        "Version": "",
+        "Status": "IN PROGRESS"
+    },
+    {
+        "Customer": "רשות האכיפה והגבייה",
+        "Device": "P400",
+        "GW": "CG",
+        "Integrator": "Gal Shalev",
+        "PM": "Adir Tzafar",
+        "Version": "",
+        "Status": "IN PROGRESS"
+    },
+    {
+        "Customer": "מכס מיסי יבוא",
+        "Device": "P400",
+        "GW": "CG",
+        "Integrator": "Gal Shalev",
+        "PM": "Adir Tzafar",
+        "Version": "3.6.2.0001",
+        "Status": "IN PROGRESS"
+    },
+    {
+        "Customer": "עמדות שירות- ממשל זמין",
+        "Device": "P400",
+        "GW": "CG",
+        "Integrator": "Gal Shalev",
+        "PM": "Adir Tzafar",
+        "Version": "",
+        "Status": "IN PROGRESS"
+    },
+    {
+        "Customer": "עמדות שירות-  לשכות הטאבו",
+        "Device": "P400",
+        "GW": "CG",
+        "Integrator": "Gal Shalev",
+        "PM": "Adir Tzafar",
+        "Version": "",
+        "Status": "IN PROGRESS"
+    },
+    {
+        "Customer": "עמדות שירות- רשות האוכלוסין",
+        "Device": "P400",
+        "GW": "CG",
+        "Integrator": "Gal Shalev",
+        "PM": "Adir Tzafar",
+        "Version": "",
+        "Status": "IN PROGRESS"
+    },
+    {
+        "Customer": "Shufersal",
+        "Device": "P400",
+        "GW": "APG",
+        "Integrator": "Gal Shalev",
+        "PM": "Hila Gitter",
+        "Version": "3.7.7.0002",
+        "Status": "IN PROGRESS",
+        "Category": "Food & Beverage",
+        "Sheet": "",
+        "Note": ""
+    },
+    {
+        "Customer": "IKEA",
+        "Device": "P400",
+        "GW": "APG",
+        "Integrator": "Gal Shalev",
+        "PM": "Adir Tzafar",
+        "Version": "3.7.2.0000",
+        "Status": "IN PROGRESS"
+    },
+    {
+        "Customer": "Hadasa",
+        "Device": "P400",
+        "GW": "CG",
+        "Integrator": "Gal Shalev",
+        "PM": "Adir Tzafar",
+        "Version": "3.7.2.0000",
+        "Status": "IN PROGRESS"
+    },
+    {
+        "Customer": "Leumit",
+        "Device": "P400",
+        "GW": "CG",
+        "Integrator": "Gal Shalev",
+        "PM": "Adir Tzafar",
+        "Version": "3.7.2.0000",
+        "Status": "IN PROGRESS"
+    },
+    {
+        "Customer": "Maccabi Dent",
+        "Device": "Priority Addon + P400",
+        "GW": "APG",
+        "Integrator": "Gal Shalev",
+        "PM": "Adir Tzafar",
+        "Version": "3.7.2.0000",
+        "Status": "IN PROGRESS"
+    },
+    {
+        "Customer": "Milgam - Mavar Gvul",
+        "Device": "VX820",
+        "GW": "CG",
+        "Integrator": "Gal Shalev",
+        "PM": "Adir Tzafar",
+        "Version": "06_30",
+        "Status": "IN PROGRESS"
+    },
+    {
+        "Customer": "Cardcom",
+        "Device": "Ecomm",
+        "GW": "-",
+        "Integrator": "Gal Shalev",
+        "PM": "Adir Tzafar",
+        "Version": "",
+        "Status": "IN PROGRESS"
+    },
+    {
+        "Customer": "Cardcom",
+        "Device": "P400",
+        "GW": "APG",
+        "Integrator": "Gal Shalev",
+        "PM": "Adir Tzafar",
+        "Version": "3.7.2.0000",
+        "Status": "IN PROGRESS"
+    },
+    {
+        "Customer": "Analyza",
+        "Device": "P400",
+        "GW": "APG",
+        "Integrator": "Gal Shalev",
+        "PM": "Adir Tzafar",
+        "Version": "",
+        "Status": "IN PROGRESS"
+    },
+    {
+        "Customer": "Net lunch",
+        "Device": "VX820",
+        "GW": "PC",
+        "Integrator": "Gal Shalev",
+        "PM": "Adir Tzafar",
+        "Version": "6.30",
+        "Status": "IN PROGRESS"
+    },
+    {
+        "Customer": "Filuet",
+        "Device": "P400",
+        "GW": "APG",
+        "Integrator": "Gal Shalev",
+        "PM": "Adir Tzafar",
+        "Version": "3.7.2.0000",
+        "Status": "IN PROGRESS"
+    },
+    {
+        "Customer": "NCR- Dor Alon",
+        "Device": "P400",
+        "GW": "APG",
+        "Integrator": "Gal Shalev",
+        "PM": "Adir Tzafar",
+        "Version": "3.7.2.0000",
+        "Status": "IN PROGRESS"
+    },
+    {
+        "Customer": "All 4 shop - Hatzi Hinam",
+        "Device": "P400",
+        "GW": "APG",
+        "Integrator": "Gal Shalev",
+        "PM": "Adir Tzafar",
+        "Version": "",
+        "Status": "IN PROGRESS"
+    },
+    {
+        "Customer": "NCR- Home Center (Fishman)",
+        "Device": "P400",
+        "GW": "APG",
+        "Integrator": "Gal Shalev",
+        "PM": "Adir Tzafar",
+        "Version": "3.7.2.0000",
+        "Status": "IN PROGRESS"
+    },
+    {
+        "Customer": "NCR-Toys R Us (Fishman)",
+        "Device": "P400",
+        "GW": "APG",
+        "Integrator": "Gal Shalev",
+        "PM": "Adir Tzafar",
+        "Version": "3.7.2.0000",
+        "Status": "IN PROGRESS"
+    },
+    {
+        "Customer": "NCR- Fresh Market",
+        "Device": "P400",
+        "GW": "APG",
+        "Integrator": "Gal Shalev",
+        "PM": "Adir Tzafar",
+        "Version": "3.7.2.0000",
+        "Status": "IN PROGRESS"
+    },
+    {
+        "Customer": "ZENAT",
+        "Device": "P400",
+        "GW": "APG",
+        "Integrator": "Gal Shalev",
+        "PM": "Adir Tzafar",
+        "Version": "3.7.2.0000",
+        "Status": "IN PROGRESS"
+    },
+    {
+        "Customer": "AYSKO",
+        "Device": "P400",
+        "GW": "APG",
+        "Integrator": "Gal Shalev",
+        "PM": "Adir Tzafar",
+        "Version": "",
+        "Status": "IN PROGRESS"
+    },
+    {
+        "Customer": "Miphal Hapais",
+        "Device": "P400",
+        "GW": "HYP",
+        "Integrator": "Gal Shalev",
+        "PM": "Almog Rubin",
+        "Version": "3.7.7.0002",
+        "Status": "IN PROGRESS"
+    },
+    {
+        "Customer": "Priority Retail (EDEA)",
+        "Device": "P400",
+        "GW": "APG",
+        "Integrator": "Gal Shalev",
+        "PM": "Almog Rubin",
+        "Version": "3.7.2.0000",
+        "Status": "IN PROGRESS"
+    },
+    {
+        "Customer": "MacDonald's",
+        "Device": "P400",
+        "GW": "APG",
+        "Integrator": "Gal Shalev",
+        "PM": "Almog Rubin",
+        "Version": "3.7.7.0002",
+        "Status": "IN PROGRESS"
+    },
+    {
+        "Customer": "Aviv Pitronot",
+        "Device": "VX820",
+        "GW": "-",
+        "Integrator": "Gal Shalev",
+        "PM": "Almog Rubin",
+        "Version": "31_06",
+        "Status": "IN PROGRESS"
+    },
+    {
+        "Customer": "Pelecard (Hotels)",
+        "Device": "P400",
+        "GW": "PC",
+        "Integrator": "Gal Shalev",
+        "PM": "Almog Rubin",
+        "Version": "3.4.3.0002",
+        "Status": "IN PROGRESS"
+    },
+    {
+        "Customer": "HYP (Hotels)",
+        "Device": "VX820",
+        "GW": "HYP",
+        "Integrator": "Gal Shalev",
+        "PM": "Almog Rubin",
+        "Version": "06.10",
+        "Status": "IN PROGRESS"
+    },
+    {
+        "Customer": "Intercard",
+        "Device": "P400",
+        "GW": "APG",
+        "Integrator": "Gal Shalev",
+        "PM": "Almog Rubin",
+        "Version": "3.7.7.0002",
+        "Status": "IN PROGRESS",
+        "Sheet": "/uploads/477f7026-b2ac-4fec-8cb4-18c57cf6c5c5.docx",
+        "Note": "/uploads/e9fe74dd-cdd5-496e-b039-7c99dc0ac509.pptx"
+    }
+]
