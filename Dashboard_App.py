@@ -1810,6 +1810,12 @@ class handler(http.server.SimpleHTTPRequestHandler):
                         <button class="btn" onclick="document.getElementById('upload-note-file').click()" style="width:auto; padding:8px 15px; font-size:12px;">📁 Upload Note</button>
                         <input type="file" id="upload-note-file" style="display:none" accept=".pdf,.docx,.doc,.xlsx,.xls,.pptx,.ppt" onchange="handleCustUpload(this, 'edit-note')">
                     </div>
+
+                    <div style="display:flex; gap:10px; align-items:center;">
+                        <input type="text" id="edit-manual" placeholder="Manual / Config URL" style="flex:1;">
+                        <button class="btn" onclick="document.getElementById('upload-manual-file').click()" style="width:auto; padding:8px 15px; font-size:12px;">📁 Upload Manual/Config</button>
+                        <input type="file" id="upload-manual-file" style="display:none" accept=".pdf,.docx,.doc,.xlsx,.xls,.pptx,.ppt" onchange="handleCustUpload(this, 'edit-manual')">
+                    </div>
                 </div>
                 <div id="cust-upload-status" style="font-size:11px; margin-top:10px; font-weight:900; color:var(--accent);"></div>
             </div>
@@ -2132,10 +2138,10 @@ class handler(http.server.SimpleHTTPRequestHandler):
                 
                 html += `
                 <div class="card" onclick="showCustomerDetail('${key}')" style="padding:0; overflow:hidden; border:1px solid var(--border); transition:0.4s; aspect-ratio:1/1.1; display:flex; flex-direction:column; background:rgba(255,255,255,0.02); cursor:pointer;">
-                    <div style="flex:1; display:flex; align-items:center; justify-content:center; padding:40px; background:rgba(0,0,0,0.2);">
+                    <div style="flex:1; display:flex; align-items:center; justify-content:center; padding:40px; background:rgba(255,255,255,0.08);">
                         <img src="${displayData.logo}" data-fallbacks="${(displayData.fallbacks || []).join(',')}"
                              onerror="handleLogoError(this)"
-                             style="max-width:80%; max-height:80%; object-fit:contain; filter:drop-shadow(0 0 10px rgba(255,255,255,0.1))">
+                             style="max-width:85%; max-height:85%; object-fit:contain; filter:drop-shadow(0 0 15px rgba(255,255,255,0.2))">
                     </div>
                     <div style="padding:20px; background:rgba(255,255,255,0.03); border-top:1px solid var(--border); text-align:center;">
                         <h3 style="margin:0; font-size:18px; font-weight:900; color:#fff;">${displayData.name}</h3>
@@ -2679,15 +2685,16 @@ class handler(http.server.SimpleHTTPRequestHandler):
             const b = document.getElementById('files'); b.innerHTML = '';
             data.forEach((r) => {
                 const globalIdx = stats_data.Integrations.indexOf(r);
-                const sheet = r.Sheet ? `<a href="${r.Sheet}" target="_blank" title="Release Sheet" style="text-decoration:none; font-size:16px;">📄</a>` : '';
-                const note = r.Note ? `<a href="${r.Note}" target="_blank" title="Release Note" style="text-decoration:none; font-size:16px;">📝</a>` : '';
+                const sheet = r.Sheet ? `<a href="${r.Sheet}" target="_blank" title="Release Sheet" style="text-decoration:none; font-size:24px; margin:0 5px;">📄</a>` : '';
+                const note = r.Note ? `<a href="${r.Note}" target="_blank" title="Release Note" style="text-decoration:none; font-size:24px; margin:0 5px;">📝</a>` : '';
+                const manual = r.Manual ? `<a href="${r.Manual}" target="_blank" title="Manual/Config" style="text-decoration:none; font-size:24px; margin:0 5px;">⚙️</a>` : '';
                 b.innerHTML += `<tr>
                     <td><b>${r.Customer}</b></td>
                     <td>${r.Device}</td>
                     <td><span style="background:rgba(59,130,246,0.1); padding:4px 10px; border-radius:6px; color:#60a5fa; font-size:14px">${r.GW}</span></td>
                     <td>${r.PM}</td>
                     <td><span style="color:${r.Version?'#fff':'#ef4444'}">${r.Version || "MISSING"}</span></td>
-                    <td style="text-align:center">${sheet} ${note}</td>
+                    <td style="text-align:center; display:flex; justify-content:center; align-items:center; gap:5px;">${sheet} ${note} ${manual}</td>
                     <td><button onclick="openEdit(${globalIdx})" style="background:rgba(255,255,255,0.05); border:1px solid var(--border); color:#fff; padding:5px 12px; border-radius:8px; cursor:pointer; font-size:12px">Edit</button></td>
                 </tr>`;
             });
@@ -2704,6 +2711,7 @@ class handler(http.server.SimpleHTTPRequestHandler):
             document.getElementById('edit-project-cat').value = '';
             document.getElementById('edit-sheet').value = '';
             document.getElementById('edit-note').value = '';
+            document.getElementById('edit-manual').value = '';
             document.querySelector('.overlay').style.display = 'block';
             document.getElementById('edit-modal').style.display = 'flex';
         }
@@ -2722,6 +2730,7 @@ class handler(http.server.SimpleHTTPRequestHandler):
             document.getElementById('edit-project-cat').value = r.Category || '';
             document.getElementById('edit-sheet').value = r.Sheet || '';
             document.getElementById('edit-note').value = r.Note || '';
+            document.getElementById('edit-manual').value = r.Manual || '';
             document.querySelector('.overlay').style.display = 'block';
             document.getElementById('edit-modal').style.display = 'flex';
         }
@@ -2734,7 +2743,8 @@ class handler(http.server.SimpleHTTPRequestHandler):
                 Version: document.getElementById('edit-version').value,
                 Category: document.getElementById('edit-project-cat').value,
                 Sheet: document.getElementById('edit-sheet').value,
-                Note: document.getElementById('edit-note').value
+                Note: document.getElementById('edit-note').value,
+                Manual: document.getElementById('edit-manual').value
             };
 
             if (sect === 'customers') {

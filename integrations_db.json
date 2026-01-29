@@ -225,7 +225,11 @@
         "Integrator": "Gal Shalev",
         "PM": "Adir Tzafar",
         "Version": "3.7.2.0000",
-        "Status": "IN PROGRESS"
+        "Status": "IN PROGRESS",
+        "Category": "",
+        "Sheet": "/uploads/7e55c427-f77d-4c10-a6ef-399d9af2448e.xlsx",
+        "Note": "/uploads/441a691c-1d28-40f3-8a52-498ce67013e3.xlsx",
+        "Manual": "/uploads/b02e459d-0ecc-4b52-b5e5-7705e44e7594.docx"
     },
     {
         "Customer": "Maccabi Dent",
