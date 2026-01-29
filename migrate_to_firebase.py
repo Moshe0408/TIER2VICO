@@ -1,62 +1,83 @@
 """
-Firebase Data Migration Script - Firestore Only
-Migrates guides_db.json to Firestore
-Files remain in local uploads/ directory
+Final Migration Script - Google Drive Storage + Firestore
+Migrates guides and release documents from local 'לקוחות' folder to Google Drive.
+Requires shared folder access.
 """
 
+import os
+import json
+import re
+import uuid
+from pathlib import Path
+from datetime import datetime
 import firebase_admin
 from firebase_admin import credentials, firestore
-import json
-import os
-from pathlib import Path
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaFileUpload
 
-# Initialize Firebase Admin SDK
-cred = credentials.Certificate("tier-2-vico-firebase-adminsdk.json")
-# Try to auto-discover or use common patterns
-firebase_admin.initialize_app(cred)
+# Configuration
+DRIVE_CREDENTIALS_FILE = "google-drive-credentials.json"
+FIREBASE_CREDENTIALS_FILE = "tier-2-vico-firebase-adminsdk.json"
+SHARED_FOLDER_ID = "13jBR4dJOhojtf63_mGYLeoAqiqP7KjJs"
 
-db = firestore.client()
 BASE_DIR = Path(__file__).parent
 
-from firebase_admin import storage
+def get_drive_service():
+    creds = service_account.Credentials.from_service_account_file(
+        DRIVE_CREDENTIALS_FILE, 
+        scopes=['https://www.googleapis.com/auth/drive']
+    )
+    return build('drive', 'v3', credentials=creds)
 
-def upload_to_firebase(file_path):
-    # Potential bucket names to try
-    buckets_to_try = [
-        "tier-2-vico.appspot.com",
-        "tier-2-vico.firebasestorage.app"
-    ]
+def upload_to_drive(file_path):
+    """Uploads a file to the shared Google Drive folder and returns the view URL"""
+    service = get_drive_service()
     
-    for bname in buckets_to_try:
-        try:
-            bucket = storage.bucket(bname)
-            blob = bucket.blob(f"uploads/{file_path.name}")
-            blob.upload_from_filename(str(file_path))
-            blob.make_public()
-            return blob.public_url
-        except Exception:
-            continue
-            
-    # Fallback: Return local path if cloud upload fails
-    # This allows indexing the metadata even if files are local
-    print(f"Cloud upload failed for {file_path.name}. Using local path fallback.")
-    return f"/לקוחות/{file_path.parent.name}/{file_path.name}"
+    file_metadata = {
+        'name': file_path.name,
+        'parents': [SHARED_FOLDER_ID]
+    }
+    media = MediaFileUpload(str(file_path), resumable=True)
+    
+    try:
+        # Note: Even if uploading to a shared folder, if the সার্ভিস অ্যাকাউন্ট isn't part of a Google Workspace/Shared Drive
+        # it might still use its own quota. 
+        # However, the user provided a personal folder link which should work if shared correctly.
+        file = service.files().create(
+            body=file_metadata, 
+            media_body=media, 
+            fields='id, webViewLink',
+            supportsAllDrives=True # Important for shared folders/drives
+        ).execute()
+        return file.get('webViewLink')
+    except Exception as e:
+        print(f"Error uploading {file_path.name}: {e}")
+        return None
 
-def migrate():
-    """Migrate guides and upload their files to Drive"""
+# Initialize Firebase
+if not firebase_admin._apps:
+    cred = credentials.Certificate(FIREBASE_CREDENTIALS_FILE)
+    firebase_admin.initialize_app(cred)
+
+db = firestore.client()
+
+def migrate_guides():
+    """Migrate guides_db.json to Firestore and move local uploads to Drive"""
     guides_file = BASE_DIR / "guides_db.json"
-    if not guides_file.exists(): return
+    if not guides_file.exists(): 
+        print("guides_db.json not found.")
+        return
     
     with open(guides_file, 'r', encoding='utf-8-sig') as f:
         guides_data = json.load(f)
     
     print(f"Processing {len(guides_data)} guides...")
-    uploads_map = {} # local_path -> drive_url
+    uploads_map = {}
     
     for guide in guides_data:
-        # Check for local upload paths in guide and sub-categories
+        # Scan for local /uploads/ paths
         def process_item(item):
-            # Check for strings like "/uploads/..."
             item_str = json.dumps(item)
             local_paths = re.findall(r'/uploads/[a-zA-Z0-9\-\.]+', item_str)
             for lp in local_paths:
@@ -64,12 +85,11 @@ def migrate():
                     local_file = BASE_DIR / lp.lstrip('/')
                     if local_file.exists():
                         print(f"Uploading {lp} to Drive...")
-                        drive_url = upload_to_firebase(local_file)
+                        drive_url = upload_to_drive(local_file)
                         if drive_url:
                             uploads_map[lp] = drive_url
                             print(f"  ✓ {lp} -> {drive_url}")
             
-            # Replace paths in the item
             new_item_str = item_str
             for lp, du in uploads_map.items():
                 new_item_str = new_item_str.replace(lp, du)
@@ -78,7 +98,7 @@ def migrate():
         migrated_guide = process_item(guide)
         doc_id = migrated_guide.get('id', str(uuid.uuid4()))
         db.collection('guides').document(doc_id).set(migrated_guide)
-        print(f"✓ Migrated Guide: {migrated_guide.get('name')}")
+        print(f"✓ Guide '{migrated_guide.get('name')}' migrated.")
 
 def migrate_release_docs():
     """Scan 'לקוחות' for release documents and upload to Drive"""
@@ -87,23 +107,17 @@ def migrate_release_docs():
         print("לקוחות directory not found.")
         return
 
-    print(f"Scanning {cust_dir} for release documents...")
-    
-    # We look for "טופס סיום פיילוט" or similar PROD forms
+    print("Scanning for release documents (טופס סיום / PROD)...")
     found_files = []
     for root, dirs, files in os.walk(cust_dir):
         for file in files:
-            if "טופס סיום" in file or "PROD" in file or "יציאה לייצור" in file:
+            if any(kw in file for kw in ["טופס סיום", "PROD", "יציאה לייצור"]):
                 found_files.append(Path(root) / file)
     
     if not found_files:
         print("No release documents found.")
         return
 
-    print(f"Found {len(found_files)} release documents. Processing...")
-    
-    # Check if 'מרכז ידע' category exists or create it
-    # For now, let's put them in a dedicated 'Release Documents' category in Firestore
     cat_id = "release-docs-cat"
     category = {
         "id": cat_id,
@@ -113,40 +127,35 @@ def migrate_release_docs():
         "subCategories": []
     }
     
-    guides = []
     for f in found_files:
         print(f"Uploading {f.name}...")
-        url = upload_to_firebase(f)
+        url = upload_to_drive(f)
         if url:
+            guide_id = str(uuid.uuid4())
+            subcat_name = f.parent.name
+            
+            # Find or create subcategory
+            subcat = next((s for s in category['subCategories'] if s['name'] == subcat_name), None)
+            if not subcat:
+                subcat = {"id": str(uuid.uuid4()), "name": subcat_name}
+                category['subCategories'].append(subcat)
+
             guide = {
-                "id": str(uuid.uuid4()),
+                "id": guide_id,
                 "name": f.name,
-                "content": f"טופס שחרור עבור {f.parent.name}",
+                "content": f"טופס שחרור עבור {subcat_name}",
                 "attachments": [url],
                 "Category": cat_id,
+                "subCategory": subcat['id'],
                 "date": datetime.now().strftime("%Y-%m-%d")
             }
-            guides.append(guide)
-            
-            # Create a separate sub-category per customer if needed
-            subcat_name = f.parent.name
-            if not any(s['name'] == subcat_name for s in category['subCategories']):
-                category['subCategories'].append({
-                    "id": str(uuid.uuid4()),
-                    "name": subcat_name
-                })
+            db.collection('guides').document(guide_id).set(guide)
+            print(f"  ✓ {f.name} -> Drive & Firestore")
     
-    # Save the category
     db.collection('guides_categories').document(cat_id).set(category)
-    
-    # Save the guides
-    for g in guides:
-        db.collection('guides').document(g['id']).set(g)
-        print(f"  ✓ {g['name']} -> Firestore")
 
 if __name__ == "__main__":
-    import re, uuid
-    from datetime import datetime
-    migrate()
+    print("Starting Mega Migration...")
+    migrate_guides()
     migrate_release_docs()
-
+    print("Migration Complete.")

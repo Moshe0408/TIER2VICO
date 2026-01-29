@@ -581,13 +581,14 @@ class DataEngine:
     def get_integrations():
         if db:
             try:
-                # Load from Firestore 'settings' document 'integrations'
+                # Load from Firestore 'data' collection, 'integrations' document
                 doc = db.collection('data').document('integrations').get()
                 if doc.exists:
                     return doc.to_dict().get('list', [])
             except Exception as e:
                 err_log(f"Firestore Integrations load error: {e}")
         
+        # Local fallback
         p = os.path.join(BASE_DIR, "integrations_db.json")
         if os.path.exists(p):
             try:
@@ -598,6 +599,47 @@ class DataEngine:
         return []
 
     @staticmethod
+    def get_guides_categories():
+        """Fetch categories from Firestore if available, otherwise fallback to index.html default logic"""
+        if db:
+            try:
+                cats = list(db.collection('guides_categories').stream())
+                if cats:
+                    # Sort to have 'KB-Guides' first or keep manual order
+                    return [c.to_dict() for c in cats]
+            except Exception as e:
+                err_log(f"Firestore categories load error: {e}")
+        
+        # Static defaults if Firestore fails
+        return [
+            {"id": "kb", "name": "מרכז ידע ונהלים", "emoji": "📚", "type": "kb", "subCategories": [
+                {"id": "kb-guides", "name": "מדריכי מערכת"},
+                {"id": "kb-policy", "name": "נהלי עבודה"}
+            ]},
+            {"id": "integrations", "name": "אינטגרציות וחיבורים", "emoji": "🔌", "type": "kb", "subCategories": [
+                {"id": "int-verifone", "name": "וריפון"},
+                {"id": "int-third-party", "name": "צד ג'"}
+            ]}
+        ]
+
+    @staticmethod
+    def get_guides_by_category(cat_id):
+        if db:
+            try:
+                guides = db.collection('guides').where('Category', '==', cat_id).stream()
+                return [g.to_dict() for g in guides]
+            except Exception as e:
+                err_log(f"Firestore guides load error: {e}")
+        
+        # Fallback to local JSON if Firestore not ready
+        p = os.path.join(BASE_DIR, "guides_db.json")
+        if os.path.exists(p):
+            try:
+                with open(p, 'r', encoding='utf-8-sig') as f:
+                    all_g = json.load(f)
+                    return [g for g in all_g if g.get('Category') == cat_id]
+            except: pass
+        return []
     def save_integrations(data):
         success = False
         if db:
@@ -919,26 +961,22 @@ class handler(http.server.SimpleHTTPRequestHandler):
                 self.send_response(200); self.send_header('Content-type','text/html;charset=utf-8'); self.end_headers()
                 self.wfile.write(self.get_ui().encode('utf-8'))
             elif self.path.startswith('/api/stats'):
-                log("Handling /api/stats (Full Data Stream)")
-                # Default to last 30 days if no params
-                end_date = datetime.now()
-                start_date = end_date - timedelta(days=30)
-                
-                def safe_get(func, *args):
-                    try: return func(*args)
-                    except Exception as e:
-                        err_log(f"API Data Error ({func.__name__}): {e}")
-                        return [] if 'list' in str(type(func)) else {}
-
+                log("Handling /api/stats (Full Cloud Structure Sync)")
                 data = {
-                    "Integrations": safe_get(DataEngine.get_integrations),
-                    "Guides": safe_get(DataEngine.get_guides),
+                    "Integrations": DataEngine.get_integrations(),
+                    "GuidesCategories": DataEngine.get_guides_categories(),
                     "CustomerLogos": CUSTOMER_LOGOS
                 }
                 self.send_response(200); self.send_header('Content-Type','application/json'); self.end_headers()
                 self.wfile.write(json.dumps(data, default=str).encode('utf-8'))
-            elif self.path == '/api/guides':
-                data = DataEngine.get_guides()
+            elif self.path.startswith('/api/guides'):
+                # Extract category filter if present
+                qs = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+                cat_id = qs.get('category', [None])[0]
+                if cat_id:
+                    data = DataEngine.get_guides_by_category(cat_id)
+                else:
+                    data = DataEngine.get_guides()
                 self.send_response(200); self.send_header('Content-Type', 'application/json'); self.end_headers()
                 self.wfile.write(json.dumps(data, ensure_ascii=False).encode('utf-8'))
             elif self.path.startswith('/api/reports'):
@@ -2238,8 +2276,10 @@ class handler(http.server.SimpleHTTPRequestHandler):
                 const data = await res.json();
                 stats_data = data;
                 
-                // Load guides from Firestore instead of API
-                await loadGuidesFromFirestore();
+                // Set guides_data from the new structural field
+                if (data.GuidesCategories) {
+                    guides_data = data.GuidesCategories;
+                }
                 
                 update();
             } catch(e) { console.error("Poll error", e); }
@@ -2360,9 +2400,9 @@ class handler(http.server.SimpleHTTPRequestHandler):
                     const emoji = cat.emoji || '📚';
                     html += `<div class="nav ${isActive?'active':''}" id="nav-cat-${cat.id}" onclick="navGuideCat('${cat.id}')" style="position:relative; display:flex; align-items:center; gap:8px;">
                         <span>${emoji} ${cat.name}</span>
-                        <div style="display:flex; gap:5px; opacity:0; transition:0.3s;" class="cat-actions">
-                            <span onclick="event.stopPropagation(); openEditCat('${cat.id}')" style="cursor:pointer; font-size:12px;">✏️</span>
-                            <span onclick="event.stopPropagation(); deleteCat('${cat.id}')" style="cursor:pointer; font-size:12px;">🗑️</span>
+                        <div style="display:flex; gap:12px; margin-right:10px; opacity:0; transition:0.3s; padding:5px; border-radius:8px; background:rgba(255,255,255,0.05)" class="cat-actions">
+                            <span onclick="event.stopPropagation(); openEditCat('${cat.id}')" style="cursor:pointer; font-size:14px; filter:grayscale(1)">✏️</span>
+                            <span onclick="event.stopPropagation(); deleteCat('${cat.id}')" style="cursor:pointer; font-size:14px; filter:grayscale(1)">🗑️</span>
                         </div>
                     </div>`;
                 });
