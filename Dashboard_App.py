@@ -7,7 +7,7 @@ import re
 import requests
 import time
 import urllib.parse
-import pandas as pd
+
 import glob
 from datetime import datetime, timedelta, timezone
 
@@ -814,99 +814,7 @@ class DataEngine:
         for k in reps: reps[k] = sorted(reps[k], key=lambda x: x['date'], reverse=True)[:10]
         return reps
 
-    @staticmethod
-    def get_verint_live(start, end):
-        files = glob.glob(os.path.join(BASE_DIR, "Verint_Reports", "Verint_Calls_*.xlsx"))
-        survey_files = glob.glob(os.path.join(BASE_DIR, "Verint_Reports", "Verint_Survey_*.xlsx"))
-        all_calls, surveys = [], {}
-        
-        # 1. Discover Headers and Read Files
-        # 1. Discover Headers and Read Files
-        for f in files:
-            m = re.search(r'(\d{8})', os.path.basename(f))
-            if m:
-                # Inclusive check (Date-only to avoid time mismatches)
-                f_dt = datetime.strptime(m.group(), "%Y%m%d").date()
-                if start.date() <= f_dt <= end.date():
-                    try:
-                        rdf = pd.read_excel(f, header=None)
-                        header_idx = 0
-                        for i, row in rdf.head(25).iterrows():
-                            # Combined check for Agent, Duration or Talk
-                            r_vals = str(row.values).upper()
-                            if 'AGENT' in r_vals or 'NAME' in r_vals or 'TALK' in r_vals:
-                                header_idx = i; break
-                        df = pd.read_excel(f, skiprows=header_idx)
-                        if not df.empty: all_calls.append(df)
-                    except: pass
-        
-        for f in survey_files:
-            m = re.search(r'(\d{8})', os.path.basename(f))
-            if m:
-                try:
-                    df = pd.read_excel(f)
-                    # Helper to find survey columns broadly
-                    cols = [str(c).upper().strip() for c in df.columns]
-                    # Look for 'Agent Name' or similar
-                    e_col_idx = next((i for i, c in enumerate(cols) if any(x in c for x in ['AGENT','EMPLOYEE','נציג','USER'])), None)
-                    # Look for 'Score', 'CSAT', 'Q1'
-                    s_col_idx = next((i for i, c in enumerate(cols) if any(x in c for x in ['SCORE','CSAT','Q1','ציון','SATISFACTION'])), None)
-                    
-                    if e_col_idx is not None and s_col_idx is not None:
-                        e_col = df.columns[e_col_idx]
-                        s_col = df.columns[s_col_idx]
-                        for _, r in df.iterrows():
-                            n = str(r[e_col]).strip()
-                            if ',' in n: n = f"{n.split(',')[1].strip()} {n.split(',')[0].strip()}"
-                            if n not in surveys: surveys[n] = []
-                            try: surveys[n].append(float(r[s_col]))
-                            except: pass
-                except Exception as e:
-                    err_log(f"Survey load error {os.path.basename(f)}: {e}")
 
-        if not all_calls: return None
-        df = pd.concat(all_calls)
-        
-        # SMART COLUMN DETECTION
-        cols = [str(c).upper().strip() for c in df.columns]
-        e_col = next((df.columns[i] for i, c in enumerate(cols) if any(x in c for x in ['AGENT NAME','EMPLOYEE','User','נציג'])), None)
-        d_col = next((df.columns[i] for i, c in enumerate(cols) if any(x in c for x in ['TALK TIME','HANDLE TIME','DURATION','משך'])), None)
-        c_col = next((df.columns[i] for i, c in enumerate(cols) if 'CAMPAIGN' in c), None)
-        
-        if not e_col or not d_col:
-            err_log(f"Missing required columns in Verint files. Found: {cols}")
-            return None
-
-        # FILTER OUT TOTALS AND INVALID ROWS
-        df = df[~df[e_col].astype(str).str.contains(r'Cnt:|Avg:|Total|Report|Date', na=False, case=False)]
-
-        def to_sec(v):
-            if pd.isna(v) or not str(v).strip(): return 0
-            p = str(v).split(':')
-            return int(p[0])*3600 + int(p[1])*60 + int(p[2]) if len(p)==3 else (int(p[0])*60 + int(p[1]) if len(p)==2 else 0)
-
-        df['sec'] = df[d_col].apply(to_sec)
-        
-        # CAMPAIGN FILTER: Strict check to exclude strings with dates or multiple numbers
-        campaign_stats = {}
-        if c_col:
-            raw_c = df[c_col].fillna('Unknown').astype(str).str.strip()
-            # Exclude anything matching common date patterns or purely numerical/id-like
-            filtered_c = raw_c[~raw_c.str.match(r'.*\d{4}.*|.*\d{2}[-./]\d{2}.*|^[0-9-]+$|.*Jan.*|.*Feb.*|.*Mar.*')]
-            campaign_stats = filtered_c.value_counts().to_dict()
-
-        stats = df.groupby(e_col).agg({'sec':['count','mean']}).reset_index()
-        stats.columns = ['Agent', 'Count', 'Avg']
-        
-        res_agents = []
-        for _, r in stats.iterrows():
-            n = str(r['Agent']).strip()
-            if ',' in n: n = f"{n.split(',')[1].strip()} {n.split(',')[0].strip()}"
-            name_key = n.lower().replace(',','').strip()
-            score = round(sum(surveys.get(n, [0]))/len(surveys.get(n, [1])), 1) if n in surveys else "-"
-            res_agents.append({"name": TIER2_MAP.get(name_key, n), "count": int(r['Count']), "avg": round(r['Avg']/60, 1), "survey": score})
-        
-        return {"total": len(df), "agents": sorted(res_agents, key=lambda x:x['count'], reverse=True), "avg": round(df['sec'].mean()/60, 1) if not df.empty else 0, "campaigns": campaign_stats}
 
     @staticmethod
     def get_calls():
@@ -2117,6 +2025,9 @@ class handler(http.server.SimpleHTTPRequestHandler):
                 if(subSect === 'projects') {
                     document.getElementById('perf-card').style.display = 'block';
                     renderIntegrations(d);
+                } else if(subSect === 'warranty') {
+                    document.getElementById('perf-card').style.display = 'block';
+                    renderWarrantyTable(d);
                 } else {
                     document.getElementById('perf-card').style.display = 'none';
                     renderManagers(d);
@@ -2177,6 +2088,7 @@ class handler(http.server.SimpleHTTPRequestHandler):
             });
             
             if(sect === 'customers') {
+                html += `<div class="sub-nav-item ${subSect==='warranty'?'active':''}" onclick="selectedSubCatId=null; subNav('warranty')">🛡️ אחריות לקוחות</div>`;
                 html += `<div class="sub-nav-item ${subSect==='managers'?'active':''}" onclick="selectedSubCatId=null; subNav('managers')">מנהלי פרויקטים</div>`;
             }
             container.innerHTML = html;
@@ -2391,8 +2303,7 @@ class handler(http.server.SimpleHTTPRequestHandler):
             const nav = document.getElementById('main-nav');
             let html = `
                 <div class="nav ${sect==='customers'?'active':''}" onclick="nav('customers')">🤝 לקוחות</div>
-                <div class="nav ${sect==='our-customers'?'active':''}" onclick="nav('our-customers')">💎 בין לקוחותנו</div>
-                <div class="nav ${sect==='reports'?'active':''}" onclick="nav('reports')">📊 דוחות</div>`;
+                <div class="nav ${sect==='our-customers'?'active':''}" onclick="nav('our-customers')">💎 בין לקוחותנו</div>`;
             
             if (guides_data && Array.isArray(guides_data)) {
                 guides_data.forEach(cat => {
@@ -2921,6 +2832,9 @@ class handler(http.server.SimpleHTTPRequestHandler):
             refresh();
         }
         function renderIntegrations(data) {
+            const h = document.getElementById('thead');
+            h.innerHTML = `<tr><th>פרויקט</th><th>סוג מכשיר</th><th>GW</th><th>מנהל</th><th>גרסה</th><th style="width:80px">מדריכים</th><th style="width:100px">פעולה</th></tr>`;
+            
             const b = document.getElementById('files'); b.innerHTML = '';
             data.forEach((r) => {
                 const globalIdx = stats_data.Integrations.indexOf(r);
@@ -2935,6 +2849,24 @@ class handler(http.server.SimpleHTTPRequestHandler):
                     <td><span style="color:${r.Version?'#fff':'#ef4444'}">${r.Version || "MISSING"}</span></td>
                     <td style="text-align:center; display:flex; justify-content:center; align-items:center; gap:5px;">${sheet} ${note} ${manual}</td>
                     <td><button onclick="openEdit(${globalIdx})" style="background:rgba(255,255,255,0.05); border:1px solid var(--border); color:#fff; padding:5px 12px; border-radius:8px; cursor:pointer; font-size:12px">Edit</button></td>
+                </tr>`;
+            });
+        }
+
+        function renderWarrantyTable(data) {
+            const h = document.getElementById('thead');
+            h.innerHTML = `<tr><th>לקוח</th><th>אחריות</th><th>משך</th><th>מענה שירות</th><th>כיסוי</th><th>SLA</th></tr>`;
+            
+            const b = document.getElementById('files'); b.innerHTML = '';
+            data.forEach((r) => {
+                const status = (r.WarrantyStatus || 'אין').includes('יש') ? '✅ ' + r.WarrantyStatus : '❌ ' + (r.WarrantyStatus || 'n/a');
+                b.innerHTML += `<tr>
+                    <td><b>${r.Customer}</b></td>
+                    <td style="font-size:13px">${status}</td>
+                    <td style="font-size:12px">${r.WarrantyDuration || '-'}</td>
+                    <td style="font-size:12px">${r.ServiceResponse || '-'}</td>
+                    <td style="font-size:12px; max-width:200px">${r.WarrantyCoverage || '-'}</td>
+                    <td style="font-size:12px">${r.SLA || '-'}</td>
                 </tr>`;
             });
         }
@@ -3015,71 +2947,7 @@ class handler(http.server.SimpleHTTPRequestHandler):
             closeM();
             update();
         }
-        async function refreshReports() {
-            await renderReports();
-        }
 
-        async function renderReports() {
-            const start = document.getElementById('rep-start').value;
-            const end = document.getElementById('rep-end').value;
-            
-            const area = document.getElementById('perf-card');
-            area.style.display = 'block';
-            area.innerHTML = '<div style="text-align:center; padding:100px; color:var(--dim);">Generating Intelligence Report... <br><br> <div style="font-size:30px; animation: spin 2s linear infinite;">⏳</div></div>';
-            
-            try {
-                const res = await fetch(`/api/reports?start=${start}&end=${end}`);
-                if (!res.ok) {
-                    const errorText = await res.text();
-                    throw new Error(errorText || "API Failure (Glassix Timeout)");
-                }
-                const data = await res.json();
-                
-                // Update KPI Cards - Ensure v_rate is a string
-                const rate = data.v_rate ? String(data.v_rate) : "0/day";
-                uk("Total Volume", data.total, "Service Tickets", data.total, "Daily Rate", rate, "Status", "LIVE");
-                
-                // Render Charts & Tables
-                let html = `
-                    <div style="display:grid; grid-template-columns: 1fr 1.2fr; gap:20px; margin-top:20px;">
-                        <div class="card" style="padding:25px; background:rgba(15,23,42,0.6); border:1px solid var(--border); border-radius:20px;">
-                            <h3 style="margin-bottom:20px; color:var(--primary); font-size:14px; font-weight:900; text-transform:uppercase; letter-spacing:1px;">Agent Engagement</h3>
-                            <table style="width:100%; text-align:right; border-collapse:collapse; color:#fff;">
-                                <thead><tr style="border-bottom:1px solid var(--border); color:var(--dim); font-size:12px;"><th style="padding:12px; text-align:right;">Agent</th><th style="padding:12px; text-align:center;">Tickets</th></tr></thead>
-                                <tbody>
-                                    ${data.agents.length ? data.agents.map(a => `<tr style="border-bottom:1px solid rgba(255,255,255,0.02); hover:background:rgba(255,255,255,0.01)">
-                                        <td style="padding:12px;"><b>${a.name}</b></td>
-                                        <td style="padding:12px; text-align:center;"><span style="background:rgba(59,130,246,0.1); padding:4px 10px; border-radius:8px; color:#60a5fa; font-weight:900;">${a.count}</span></td>
-                                    </tr>`).join('') : '<tr><td colspan="2" style="text-align:center; padding:20px; color:var(--dim)">No agent data for this range</td></tr>'}
-                                </tbody>
-                            </table>
-                        </div>
-                        <div class="card" style="padding:25px; background:rgba(15,23,42,0.6); border:1px solid var(--border); border-radius:20px;">
-                            <h3 style="margin-bottom:25px; color:var(--primary); font-size:14px; font-weight:900; text-transform:uppercase; letter-spacing:1px;">Tag Distribution (Top 15)</h3>
-                            <div style="display:flex; flex-direction:column; gap:15px;">
-                                ${data.tags.length ? data.tags.map(t => `
-                                    <div style="display:flex; justify-content:space-between; align-items:center;">
-                                        <span style="font-size:13px; font-weight:600; width:120px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${t.name}</span>
-                                        <div style="flex:1; height:6px; background:rgba(255,255,255,0.03); margin:0 15px; border-radius:3px; overflow:hidden;">
-                                            <div style="width:${Math.min(100, (t.count/data.total*100)).toFixed(1)}%; height:100%; background:linear-gradient(to right, #3b82f6, #8b5cf6); border-radius:3px;"></div>
-                                        </div>
-                                        <span style="font-weight:900; font-size:13px; color:var(--accent); min-width:30px; text-align:left;">${t.count}</span>
-                                    </div>
-                                `).join('') : '<div style="text-align:center; padding:20px; color:var(--dim)">No tags found</div>'}
-                            </div>
-                        </div>
-                    </div>
-                `;
-                area.innerHTML = html;
-                
-            } catch (e) {
-                console.error(e);
-                area.innerHTML = `<div style="padding:50px; text-align:center; color:#ef4444; background:rgba(239,68,68,0.05); border:1px dashed #ef4444; border-radius:20px;">
-                    <b style="font-size:18px;">REPORT ERROR</b><br><br> ${e.message} <br><br> 
-                    <button onclick="refreshReports()" class="btn" style="width:auto; background:#ef4444; margin-top:10px;">Retry</button>
-                </div>`;
-            }
-        }
         function renderManagers(data) {
             let m = document.getElementById('manager-view');
             if(!m) { m = document.createElement('div'); m.id = 'manager-view'; document.getElementById('capture-area').appendChild(m); }
