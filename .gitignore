@@ -1,22 +1,33 @@
-# התעלם מהכל ברירת מחדל
-*
+# Credentials
+*-firebase-adminsdk.json
+google-drive-credentials.json
+serviceAccountKey.json
 
-# אל תתעלם מהקבצים האלו (Whitelist)
-!.gitignore
-!Dashboard_App.py
-!guides_db.json
-!integrations_db.json
-!vercel.json
-!requirements.txt
-!.vercelignore
-!לקוחות/
-!מדריכים/
-# Ignore contents of uploads
-!uploads/
-# התעלם מתיקיות פנימיות וזבל של מערכת הפעלה
+# Data Folders (Migrating to Cloud)
+לקוחות/
+מדריכים/
+TIER2/
+Digital/
+Glassix_Insights/
+Verint_Reports/
+logs_stf/
+lovable/
+csv/
+logs/
+uploads/
+
+# Python
+venv/
+.venv/
 __pycache__/
+*.pyc
+*.pyo
+
+# Vercel & Node
+.vercel/
+.next/
+node_modules/
+
+# OS
 .DS_Store
 Thumbs.db
-.vscode/
-.venv/
-venv/
