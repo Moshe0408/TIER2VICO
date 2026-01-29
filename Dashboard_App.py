@@ -1367,6 +1367,28 @@ class handler(http.server.SimpleHTTPRequestHandler):
     <meta charset="UTF-8">
     <title>Tier 2 Vico | Intelligence Dashboard</title>
     <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+    
+    <!-- Firebase SDK -->
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+        import { getFirestore, collection, getDocs, addDoc, updateDoc, deleteDoc, doc, setDoc } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+        import { getStorage, ref, uploadBytes, getDownloadURL } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js';
+        
+        const firebaseConfig = {
+            apiKey: "AIzaSyB3pruogaljwaw9FVyrD3MvPOHgpyGfxzs",
+            authDomain: "tier-2-vico.firebaseapp.com",
+            projectId: "tier-2-vico",
+            storageBucket: "tier-2-vico.firebasestorage.app",
+            messagingSenderId: "272065575004",
+            appId: "1:272065575004:web:11ed615295a56dbc824e99",
+            measurementId: "G-57ZTPZWJSV"
+        };
+        
+        const app = initializeApp(firebaseConfig);
+        window.db = getFirestore(app);
+        window.storage = getStorage(app);
+        window.firebaseRefs = { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, setDoc, ref, uploadBytes, getDownloadURL };
+    </script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800;900&display=swap');
         :root { --bg: #0f172a; --card: #1e293b; --primary: #3b82f6; --accent: #10b981; --text: #f1f5f9; --dim: #94a3b8; --border: rgba(255,255,255,0.1); --panel: #1e293b; --content-bg: #f8fafc; }
@@ -2059,12 +2081,43 @@ class handler(http.server.SimpleHTTPRequestHandler):
             tree.innerHTML = html;
         }
 
+        
+        // Load guides from Firestore
+        async function loadGuidesFromFirestore() {
+            try {
+                const { collection, getDocs } = window.firebaseRefs;
+                const guidesCol = collection(window.db, 'guides');
+                const snapshot = await getDocs(guidesCol);
+                
+                if (!snapshot.empty) {
+                    guides_data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    console.log('Loaded guides from Firestore:', guides_data.length);
+                } else {
+                    console.log('No guides in Firestore, using empty array');
+                    guides_data = [];
+                }
+            } catch(e) {
+                console.error("Firestore load error:", e);
+                // Fallback to API if Firestore fails
+                try {
+                    const res = await fetch('/api/stats');
+                    const data = await res.json();
+                    if(data.Guides) guides_data = data.Guides;
+                } catch(apiError) {
+                    console.error("API fallback failed:", apiError);
+                }
+            }
+        }
+
         async function refresh() {
             try {
                 const res = await fetch('/api/stats');
                 const data = await res.json();
                 stats_data = data;
-                if(data.Guides) guides_data = data.Guides;
+                
+                // Load guides from Firestore instead of API
+                await loadGuidesFromFirestore();
+                
                 update();
             } catch(e) { console.error("Poll error", e); }
         }
@@ -2334,18 +2387,34 @@ class handler(http.server.SimpleHTTPRequestHandler):
             document.querySelector('.overlay').style.display = 'block';
             document.getElementById('cat-modal').style.display = 'flex';
         }
+        
+        // Firebase Storage upload helper
+        async function uploadToFirebaseStorage(file) {
+            try {
+                const { ref, uploadBytes, getDownloadURL } = window.firebaseRefs;
+                const timestamp = Date.now();
+                const fileName = `${timestamp}_${file.name}`;
+                const storageRef = ref(window.storage, `uploads/${fileName}`);
+                
+                const snapshot = await uploadBytes(storageRef, file);
+                const downloadURL = await getDownloadURL(snapshot.ref);
+                
+                console.log('File uploaded to Firebase Storage:', downloadURL);
+                return { url: downloadURL, success: true };
+            } catch (error) {
+                console.error('Firebase Storage upload error:', error);
+                throw error;
+            }
+        }
+        
         let currentGuideImages = [];
         async function handleCustUpload(input, targetId) {
             if(!input.files || !input.files[0]) return;
             const status = document.getElementById('cust-upload-status');
             status.innerText = "UPLOADING...";
             
-            const formData = new FormData();
-            formData.append('file', input.files[0]);
-            
             try {
-                const resp = await fetch('/api/upload', { method: 'POST', body: formData });
-                const data = await resp.json();
+                const data = await uploadToFirebaseStorage(input.files[0]);
                 document.getElementById(targetId).value = data.url;
                 status.innerText = "UPLOAD SUCCESSFUL!";
                 setTimeout(() => status.innerText = "", 3000);
@@ -2359,15 +2428,8 @@ class handler(http.server.SimpleHTTPRequestHandler):
             const status = document.getElementById('upload-status');
             status.innerText = "UPLOADING...";
             
-            const formData = new FormData();
-            formData.append('file', input.files[0]);
-            
             try {
-                const resp = await fetch('/api/upload', {
-                    method: 'POST',
-                    body: formData
-                });
-                const data = await resp.json();
+                const data = await uploadToFirebaseStorage(input.files[0]);
                 currentGuideImages.push(data.url);
                 renderGuideImages();
                 status.innerText = "SUCCESS";
@@ -2451,8 +2513,7 @@ class handler(http.server.SimpleHTTPRequestHandler):
                         const uploadId = 'up-' + Date.now();
                         document.execCommand('insertHTML', false, `<i id="${uploadId}">[Uploading Image...]</i>`);
                         
-                        const resp = await fetch('/api/upload', { method: 'POST', body: formData });
-                        const data = await resp.json();
+                        const data = await uploadToFirebaseStorage(blob);
                         
                         const placeholder = document.getElementById(uploadId);
                         if(placeholder) {
@@ -2476,9 +2537,8 @@ class handler(http.server.SimpleHTTPRequestHandler):
             btn.disabled = true;
 
             try {
-                // First upload the file
-                const uploadResp = await fetch('/api/upload', { method: 'POST', body: formData });
-                const uploadData = await uploadResp.json();
+                // First upload the file to Firebase Storage
+                const uploadData = await uploadToFirebaseStorage(input.files[0]);
                 
                 // Then extract its content
                 const extractResp = await fetch('/api/extract-content', {
@@ -2666,20 +2726,31 @@ class handler(http.server.SimpleHTTPRequestHandler):
         }
         async function syncGuides() {
             try {
-                const resp = await fetch('/api/guides/save', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(guides_data)
-                });
-                if(!resp.ok) {
-                    const txt = await resp.text();
-                    err_log("Save Failed: " + txt);
-                    alert("שגיאת שמירה בשרת: " + txt + "\n(וודא ש-Firebase מחובר)");
-                } else {
-                    log("Guides saved successfully");
+                const { collection, doc, setDoc } = window.firebaseRefs;
+                
+                // Save each guide document to Firestore
+                for (const guide of guides_data) {
+                    const guideRef = doc(window.db, 'guides', guide.id);
+                    await setDoc(guideRef, guide);
                 }
+                
+                log("Guides saved to Firestore successfully");
+                console.log('Synced', guides_data.length, 'guides to Firestore');
+                
+                // Also save to backend as backup
+                try {
+                    await fetch('/api/guides/save', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(guides_data)
+                    });
+                } catch(backupError) {
+                    console.warn('Backend backup save failed:', backupError);
+                }
+                
             } catch(e) {
-                err_log("Sync error: " + e);
+                err_log("Firestore sync error: " + e);
+                alert("שגיאת שמירה ל-Firestore: " + e.message);
             }
             refresh();
         }
