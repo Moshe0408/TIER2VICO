@@ -597,7 +597,8 @@ class DataEngine:
                 from firebase_admin import db
                 ref = db.reference('guides')
                 data = ref.get()
-                if data: return data
+                if data and len(data) > 0: 
+                    return data
             except Exception as e:
                 err_log(f"Firebase Guides load error: {e}")
 
