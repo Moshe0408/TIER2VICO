@@ -44,7 +44,7 @@ def err_log(msg):
 
 try:
     import firebase_admin
-    from firebase_admin import credentials, auth
+    from firebase_admin import credentials, auth, firestore
     HAS_FIREBASE = True
 except ImportError:
     HAS_FIREBASE = False
@@ -64,7 +64,6 @@ try:
     # Try to load credentials from environment variable first (for Vercel)
     gdrive_creds_json = os.environ.get('GOOGLE_DRIVE_CREDENTIALS')
     if gdrive_creds_json:
-        import json
         creds_data = json.loads(gdrive_creds_json)
         GDRIVE_CREDS = service_account.Credentials.from_service_account_info(
             creds_data,
@@ -82,38 +81,38 @@ try:
     else:
         HAS_GDRIVE = False
         log("Google Drive credentials not found (neither env var nor file)")
-except ImportError as e:
+except Exception as e:
     HAS_GDRIVE = False
-    log(f"Google Drive API not available: {e}")
-    log("FIREBASE SDK NOT FOUND - Falling back to local auth")
+    log(f"Google Drive API Init Error: {e}")
 
 # --- FIREBASE SETUP ---
+db = None # Firestore Client
 if HAS_FIREBASE:
     try:
         if not firebase_admin._apps:
-            db_url = os.environ.get("FIREBASE_DATABASE_URL", "https://tier-2-vico-default-rtdb.firebaseio.com/")
             service_account_json = os.environ.get("FIREBASE_SERVICE_ACCOUNT")
             key_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "serviceAccountKey.json")
             
             cred = None
             if service_account_json:
-                import json
-                cred_info = json.loads(service_account_json)
-                cred = credentials.Certificate(cred_info)
+                cred = credentials.Certificate(json.loads(service_account_json))
                 log("Firebase: Initializing via Environment Variable.")
             elif os.path.exists(key_path):
                 cred = credentials.Certificate(key_path)
                 log("Firebase: Initializing via serviceAccountKey.json.")
             
             if cred:
-                firebase_admin.initialize_app(cred, {'databaseURL': db_url})
-                log(f"Firebase initialized with Database: {db_url}")
+                firebase_admin.initialize_app(cred)
+                db = firestore.client()
+                log("Firebase Firestore initialized.")
             else:
-                log("Warning: No Firebase credentials found (JSON or Env Var). Data will be LOCAL ONLY.")
+                log("Warning: No Firebase credentials found. Data will be LOCAL ONLY.")
+        else:
+            db = firestore.client()
     except Exception as e:
         err_log(f"Firebase Init Failed: {e}")
 else:
-    log("Firebase library not installed. Using local auth.")
+    log("Firebase library not installed. Using local storage only.")
 
 # In-memory session store (In production, use a database or Redis)
 SESSIONS = {} 
@@ -580,14 +579,14 @@ class DataEngine:
 
     @staticmethod
     def get_integrations():
-        if HAS_FIREBASE and firebase_admin._apps:
+        if db:
             try:
-                from firebase_admin import db
-                ref = db.reference('integrations')
-                data = ref.get()
-                if data: return data
+                # Load from Firestore 'settings' document 'integrations'
+                doc = db.collection('data').document('integrations').get()
+                if doc.exists:
+                    return doc.to_dict().get('list', [])
             except Exception as e:
-                err_log(f"Firebase Integrations load error: {e}")
+                err_log(f"Firestore Integrations load error: {e}")
         
         p = os.path.join(BASE_DIR, "integrations_db.json")
         if os.path.exists(p):
@@ -601,45 +600,35 @@ class DataEngine:
     @staticmethod
     def save_integrations(data):
         success = False
-        firebase_success = False
-        # Save to Firebase
-        if HAS_FIREBASE and firebase_admin._apps:
+        if db:
             try:
-                from firebase_admin import db
-                ref = db.reference('integrations')
-                ref.set(data)
-                firebase_success = True
+                db.collection('data').document('integrations').set({'list': data})
                 success = True
             except Exception as e:
-                err_log(f"Firebase Integrations save error: {e}")
+                err_log(f"Firestore Integrations save error: {e}")
 
-        # Save to Local (optional backup/development)
-        p = os.path.join(BASE_DIR, "integrations_db.json")
+        # Local save as backup
         try:
+            p = os.path.join(BASE_DIR, "integrations_db.json")
             with open(p, 'w', encoding='utf-8') as f:
                 json.dump(data, f, indent=4, ensure_ascii=False)
             success = True
-        except Exception as e:
-            err_log(f"Integrations local save error (expected on Vercel): {e}")
-            # If Firebase worked, we don't care if local failed
-            if firebase_success: success = True
-        
+        except: pass
         return success
 
     # --- GUIDES LOGIC ---
     @staticmethod
     def get_guides():
-        if HAS_FIREBASE and firebase_admin._apps:
+        if db:
             try:
-                from firebase_admin import db
-                ref = db.reference('guides')
-                data = ref.get()
-                if data and len(data) > 0: 
-                    return data
+                docs = db.collection('guides').stream()
+                guides = [doc.to_dict() for doc in docs]
+                if guides: return guides
             except Exception as e:
-                err_log(f"Firebase Guides load error: {e}")
+                err_log(f"Firestore Guides load error: {e}")
 
         p = os.path.join(BASE_DIR, "guides_db.json")
+        # ... fallback ...
         if os.path.exists(p):
             try:
                 with open(p, 'r', encoding='utf-8-sig') as f:
@@ -671,8 +660,33 @@ class DataEngine:
             success = True
         except Exception as e:
             err_log(f"Guides local save error (expected on Vercel): {e}")
-            if firebase_success: success = True
-        
+    @staticmethod
+    def save_guides(data):
+        success = False
+        if db:
+            try:
+                # Save as individual documents for better Firestore performance
+                # or as one big document for simplicity. Let's do individual for scalability.
+                batch = db.batch()
+                # First delete existing (optional, but cleaner)
+                # For simplicity in this dashboard, let's just write them all.
+                for guide in data:
+                    # Ensure each guide has an ID
+                    gid = guide.get('id') or str(uuid.uuid4())
+                    doc_ref = db.collection('guides').document(gid)
+                    batch.set(doc_ref, guide)
+                batch.commit()
+                success = True
+            except Exception as e:
+                err_log(f"Firestore Guides save error: {e}")
+
+        # Local save as backup
+        try:
+            p = os.path.join(BASE_DIR, "guides_db.json")
+            with open(p, 'w', encoding='utf-8') as f:
+                json.dump(data, f, indent=4, ensure_ascii=False)
+            success = True
+        except: pass
         return success
 
     @staticmethod
@@ -949,7 +963,18 @@ class handler(http.server.SimpleHTTPRequestHandler):
                     err_log(f"Report Generation Error: {e}")
                     self.send_error(500, str(e))
                 return
-            elif any(self.path.startswith(p) for p in ['/uploads/', '/מדריכים/', '/לקוחות/', '/TIER2/', '/Digital/', '/csv/']):
+            if self.path == '/api/health':
+                health = {
+                    "firebase": db is not None,
+                    "gdrive": (HAS_GDRIVE and GDRIVE_SERVICE is not None),
+                    "parsers": HAS_PARSERS,
+                    "vercel": os.environ.get('VERCEL') is not None
+                }
+                self.send_response(200); self.send_header('Content-Type','application/json'); self.end_headers()
+                self.wfile.write(json.dumps(health).encode())
+                return
+            
+            if any(self.path.startswith(p) for p in ['/uploads/', '/מדריכים/', '/לקוחות/', '/TIER2/', '/Digital/', '/csv/']):
                 # Generalized local file server with correct mime types
                 try:
                     rel_path = urllib.parse.unquote(self.path[1:])
@@ -1695,6 +1720,10 @@ class handler(http.server.SimpleHTTPRequestHandler):
         <div style="flex:1; display:flex; gap:20px; align-items:center;">
             <h1 style="font-size:24px; font-weight:900; background: linear-gradient(to right, #60a5fa, #a78bfa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; min-width:max-content;">TIER 2 VICO</h1>
             <div class="clock-box" id="live-clock" style="font-size:14px;">--:--:--</div>
+            <div id="health-check" style="display:flex; gap:10px; font-size:12px; margin-right:15px; border-right:1px solid var(--border); padding-right:15px;">
+                <div id="h-firebase" title="Firestore Connection" style="display:flex; align-items:center; gap:5px; color:var(--dim)"><span style="width:8px; height:8px; border-radius:50%; background:#666"></span> DB</div>
+                <div id="h-gdrive" title="Google Drive Storage" style="display:flex; align-items:center; gap:5px; color:var(--dim)"><span style="width:8px; height:8px; border-radius:50%; background:#666"></span> DRIVE</div>
+            </div>
         </div>
         <div class="nav-links" id="main-nav" style="flex:3; justify-content:center; gap:12px">
             <div class="nav active" id="nav-customers" onclick="nav('customers')">🤝 לקוחות</div>
@@ -1964,6 +1993,20 @@ class handler(http.server.SimpleHTTPRequestHandler):
         let selectedGuideId = null;
 
         async function init() {
+            // Check System Health
+            fetch('/api/health').then(r => r.json()).then(h => {
+                const fb = document.getElementById('h-firebase');
+                if(fb) {
+                    fb.style.color = h.firebase ? 'var(--accent)' : '#ef4444';
+                    fb.querySelector('span').style.background = h.firebase ? 'var(--accent)' : '#ef4444';
+                }
+                const gd = document.getElementById('h-gdrive');
+                if(gd) {
+                    gd.style.color = h.gdrive ? 'var(--accent)' : '#ef4444';
+                    gd.querySelector('span').style.background = h.gdrive ? 'var(--accent)' : '#ef4444';
+                }
+            }).catch(e => console.warn("Health check failed", e));
+
             const clock = document.getElementById('live-clock');
             if(clock) setInterval(() => clock.innerText = new Date().toLocaleTimeString('en-GB'), 1000);
             
@@ -2378,7 +2421,7 @@ class handler(http.server.SimpleHTTPRequestHandler):
             backBtn.style.background = 'rgba(255,255,255,0.05)';
             backBtn.style.border = '1px solid var(--border)';
             backBtn.style.color = '#fff';
-            backBtn.innerText = '← Back to Overview';
+            backBtn.innerText = '← חזרה לרשימה';
             backBtn.onclick = () => { selectedGuideId = null; update(); };
             display.appendChild(backBtn);
             
@@ -2408,11 +2451,11 @@ class handler(http.server.SimpleHTTPRequestHandler):
             contentDiv.style.margin = '0 auto';
             contentDiv.innerHTML = `
                 <div style="text-align:center; margin-bottom:50px; position:relative;">
-                    <button class="admin-btn" onclick="openEditGuide('${cat.id}', '${guide.id}')" style="position:absolute; top:0; right:0;">✏️ EDIT GUIDE</button>
-                    <h2 style="font-size:48px; font-weight:900; background: linear-gradient(to left, #fff, var(--dim)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin:0;">${guide.title}</h2>
-                    <p style="color:var(--dim); font-size:16px; margin-top:10px;">${cat.name} • ${new Date().toLocaleDateString('he-IL')}</p>
+                    <button class="admin-btn" onclick="openEditGuide('${cat.id}', '${guide.id}')" style="position:absolute; top:0; right:0;">✏️ ערוך מדריך</button>
+                    <h2 style="font-size:40px; font-weight:900; background: linear-gradient(to left, #fff, var(--dim)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin:0;">${guide.title}</h2>
+                    <p style="color:var(--dim); font-size:16px; margin-top:10px;">${cat.name} • ${guide.date || new Date().toLocaleDateString('he-IL')}</p>
                 </div>
-                <div class="guide-body" style="direction:rtl; text-align:right; font-size:20px; line-height:2;">${formattedContent}</div>`;
+                <div class="guide-body" style="direction:rtl; text-align:right; font-size:18px; line-height:1.8; color:rgba(255,255,255,0.9)">${formattedContent}</div>`;
             display.appendChild(contentDiv);
             
             if(guide.images && guide.images.length > 0) {
@@ -2441,11 +2484,11 @@ class handler(http.server.SimpleHTTPRequestHandler):
                 
                 if(attachments.length > 0) {
                     display.innerHTML += `<div style="margin-top:40px; border-top:1px solid var(--border); padding-top:20px">
-                        <h4 style="color:var(--dim); font-size:12px; text-transform:uppercase">Attachments</h4>
+                        <h4 style="color:var(--dim); font-size:12px; text-transform:uppercase">קבצים מצורפים</h4>
                         <div style="display:flex; flex-direction:column; gap:10px">
                             ${attachments.map(url => `
                                 <a href="${url}" target="_blank" style="background:rgba(255,255,255,0.05); padding:15px; border-radius:12px; color:var(--primary); text-decoration:none; display:flex; align-items:center; gap:10px; font-weight:700">
-                                    <span style="font-size:24px">📄</span> Download Attachment (${url.split('.').pop().toUpperCase()})
+                                    <span style="font-size:24px">📄</span> הורד קובץ (${url.split('.').pop().toUpperCase()})
                                 </a>
                             `).join('')}
                         </div>
@@ -2458,8 +2501,8 @@ class handler(http.server.SimpleHTTPRequestHandler):
         }
         function openAddCat() {
             editingCatId = null;
-            document.getElementById('cat-modal').querySelector('b').innerText = 'Add New Category';
-            document.getElementById('cat-save-btn').innerText = 'Save Category';
+            document.getElementById('cat-modal').querySelector('b').innerText = 'הוספת קטגוריה חדשה';
+            document.getElementById('cat-save-btn').innerText = 'שמור קטגוריה';
             document.getElementById('cat-name').value = '';
             document.getElementById('cat-emoji').value = '';
             document.getElementById('cat-type').value = 'kb';
@@ -2491,7 +2534,7 @@ class handler(http.server.SimpleHTTPRequestHandler):
         async function handleCustUpload(input, targetId) {
             if(!input.files || !input.files[0]) return;
             const status = document.getElementById('cust-upload-status');
-            status.innerText = "UPLOADING...";
+            status.innerText = "מעלה...";
             
             const formData = new FormData();
             formData.append('file', input.files[0]);
@@ -2500,17 +2543,17 @@ class handler(http.server.SimpleHTTPRequestHandler):
                 const resp = await fetch('/api/upload', { method: 'POST', body: formData });
                 const data = await resp.json();
                 document.getElementById(targetId).value = data.url;
-                status.innerText = "UPLOAD SUCCESSFUL!";
+                status.innerText = "הועלה בהצלחה!";
                 setTimeout(() => status.innerText = "", 3000);
             } catch (err) {
                 console.error(err);
-                status.innerText = "UPLOAD FAILED";
+                status.innerText = "העלאה נכשלה";
             }
         }
         async function handleUpload(input) {
             if(!input.files || !input.files[0]) return;
             const status = document.getElementById('upload-status');
-            status.innerText = "UPLOADING...";
+            status.innerText = "מעלה...";
             
             const formData = new FormData();
             formData.append('file', input.files[0]);
@@ -2523,11 +2566,11 @@ class handler(http.server.SimpleHTTPRequestHandler):
                 const data = await resp.json();
                 currentGuideImages.push(data.url);
                 renderGuideImages();
-                status.innerText = "SUCCESS";
-                setTimeout(() => status.innerText = "Ready for more", 2000);
+                status.innerText = "הושלם";
+                setTimeout(() => status.innerText = "מוכן להעלאה נוספת", 2000);
             } catch (err) {
                 console.error(err);
-                status.innerText = "FAILED";
+                status.innerText = "נכשל";
             }
         }
         function renderGuideImages() {
@@ -2539,7 +2582,7 @@ class handler(http.server.SimpleHTTPRequestHandler):
                 return `
                 <div style="position:relative; width:100px; height:120px; background:rgba(255,255,255,0.05); border-radius:8px; border:1px solid var(--border); display:flex; flex-direction:column; align-items:center; justify-content:center; overflow:visible">
                     ${isImg ? `<img src="${src}" style="width:100%; height:70px; object-fit:cover; border-radius:8px 8px 0 0;">` : `<span style="font-size:32px">📄</span>`}
-                    <div style="background:var(--primary); color:#fff; font-size:10px; font-weight:900; width:100%; text-align:center; cursor:pointer; padding:4px 0" onclick="copyTag('${tag}')">Copy ${tag}</div>
+                    <div style="background:var(--primary); color:#fff; font-size:10px; font-weight:900; width:100%; text-align:center; cursor:pointer; padding:4px 0" onclick="copyTag('${tag}')">העתק ${tag}</div>
                     <span onclick="removeGuideImage(${i})" style="position:absolute; top:-8px; right:-8px; background:#ef4444; color:#fff; border-radius:50%; width:20px; height:20px; font-size:12px; display:flex; align-items:center; justify-content:center; cursor:pointer; font-weight:900; box-shadow:0 0 10px rgba(0,0,0,0.5)">×</span>
                 </div>`;
             }).join('');
@@ -2548,8 +2591,8 @@ class handler(http.server.SimpleHTTPRequestHandler):
             navigator.clipboard.writeText(t);
             const btn = event.target;
             const old = btn.innerText;
-            btn.innerText = "COPIED!";
-            setTimeout(() => btn.innerText = old, 1500);
+            btn.innerText = "הועתק!";
+            setTimeout(() => btn.innerText = "העתק " + t, 1500);
         }
         function removeGuideImage(i) {
             currentGuideImages.splice(i, 1);
@@ -2821,31 +2864,19 @@ class handler(http.server.SimpleHTTPRequestHandler):
         }
         async function syncGuides() {
             try {
-                const { collection, doc, setDoc } = window.firebaseRefs;
-                
-                // Save each guide document to Firestore
-                for (const guide of guides_data) {
-                    const guideRef = doc(window.db, 'guides', guide.id);
-                    await setDoc(guideRef, guide);
+                const resp = await fetch('/api/guides/save', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(guides_data)
+                });
+                if(resp.ok) {
+                    console.log('Synced', guides_data.length, 'guides to backend');
+                } else {
+                    throw new Error("Backend save failed");
                 }
-                
-                log("Guides saved to Firestore successfully");
-                console.log('Synced', guides_data.length, 'guides to Firestore');
-                
-                // Also save to backend as backup
-                try {
-                    await fetch('/api/guides/save', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(guides_data)
-                    });
-                } catch(backupError) {
-                    console.warn('Backend backup save failed:', backupError);
-                }
-                
             } catch(e) {
-                err_log("Firestore sync error: " + e);
-                alert("שגיאת שמירה ל-Firestore: " + e.message);
+                console.error("Sync error:", e);
+                alert("שגיאת שמירה: הנתונים לא נשמרו בשרת. וודא שאתה מחובר.");
             }
             refresh();
         }
