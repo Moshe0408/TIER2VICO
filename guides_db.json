@@ -51,58 +51,5 @@
                 "guides": []
             }
         ]
-    },
-    {
-        "id": "1769623754798",
-        "name": "דרייברים",
-        "emoji": "🏎️",
-        "guides": [
-            {
-                "id": "178fa946-9339-4329-9644-04990899e0ad",
-                "title": "BUNDLE_VX820_06_22",
-                "content": "\n                <div class=\"driver-asset\">\n                    <div class=\"driver-asset-icon\">📦</div>\n                    <div class=\"driver-asset-info\">\n                        <div class=\"driver-asset-title\">BUNDLE_VX820_06_22</div>\n                        <div class=\"driver-asset-meta\">File: BUNDLE_VX820_06_22.zip | Size: 1539KB</div>\n                    </div>\n                    <a href=\"https://drive.google.com/uc?export=download&id=1W59zRArNLEvQOqOa9GkXFqQeYZbC6J0E\" class=\"btn-download\" target=\"_blank\">Download File</a>\n                </div>\n                "
-            },
-            {
-                "id": "809e7984-8d47-460b-80a0-59d74cdfa756",
-                "title": "CardcomEmvSetup_P400",
-                "content": "\n                <div class=\"driver-asset\">\n                    <div class=\"driver-asset-icon\">📦</div>\n                    <div class=\"driver-asset-info\">\n                        <div class=\"driver-asset-title\">CardcomEmvSetup_P400</div>\n                        <div class=\"driver-asset-meta\">File: CardcomEmvSetup_P400.zip | Size: 20906KB</div>\n                    </div>\n                    <a href=\"https://drive.google.com/uc?export=download&id=1P39zRArNLEvQOqOa9GkXFqQeYZbC6J0E\" class=\"btn-download\" target=\"_blank\">Download File</a>\n                </div>\n                "
-            },
-            {
-                "id": "600e216b-1719-41f6-b2f3-b7d691fd16a6",
-                "title": "Emv2Ash96",
-                "content": "\n                <div class=\"driver-asset\">\n                    <div class=\"driver-asset-icon\">📦</div>\n                    <div class=\"driver-asset-info\">\n                        <div class=\"driver-asset-title\">Emv2Ash96</div>\n                        <div class=\"driver-asset-meta\">File: Emv2Ash96.zip | Size: 6607KB</div>\n                    </div>\n                    <a href=\"https://drive.google.com/uc?export=download&id=1K59zRArNLEvQOqOa9GkXFqQeYZbC6J0E\" class=\"btn-download\" target=\"_blank\">Download File</a>\n                </div>\n                "
-            },
-            {
-                "id": "629defe5-b127-4510-83bd-1805d3b24b99",
-                "title": "Emv2Ash96_v1.3.2.0",
-                "content": "\n                <div class=\"driver-asset\">\n                    <div class=\"driver-asset-icon\">📦</div>\n                    <div class=\"driver-asset-info\">\n                        <div class=\"driver-asset-title\">Emv2Ash96_v1.3.2.0</div>\n                        <div class=\"driver-asset-meta\">File: Emv2Ash96_v1.3.2.0.zip | Size: 94878KB</div>\n                    </div>\n                    <a href=\"https://drive.google.com/uc?export=download&id=1J59zRArNLEvQOqOa9GkXFqQeYZbC6J0E\" class=\"btn-download\" target=\"_blank\">Download File</a>\n                </div>\n                "
-            },
-            {
-                "id": "7d638526-71d2-44e7-a0ae-f5b4d81ff716",
-                "title": "plugins",
-                "content": "\n                <div class=\"driver-asset\">\n                    <div class=\"driver-asset-icon\">📦</div>\n                    <div class=\"driver-asset-info\">\n                        <div class=\"driver-asset-title\">plugins</div>\n                        <div class=\"driver-asset-meta\">File: plugins.rar | Size: 71KB</div>\n                    </div>\n                    <a href=\"/מדריכים/דרייברים/plugins.rar\" class=\"btn-download\" download>Download File</a>\n                </div>\n                "
-            },
-            {
-                "id": "efaffb7d-c4eb-4938-a8a4-b22a88199a3e",
-                "title": "TxAshrEMV",
-                "content": "\n                <div class=\"driver-asset\">\n                    <div class=\"driver-asset-icon\">📦</div>\n                    <div class=\"driver-asset-info\">\n                        <div class=\"driver-asset-title\">TxAshrEMV</div>\n                        <div class=\"driver-asset-meta\">File: TxAshrEMV.rar | Size: 4232KB</div>\n                    </div>\n                    <a href=\"/מדריכים/דרייברים/TxAshrEMV.rar\" class=\"btn-download\" download>Download File</a>\n                </div>\n                "
-            },
-            {
-                "id": "6078e2b5-1a9b-4d4e-b1a5-2c8b893aff1c",
-                "title": "v6.9.1.4",
-                "content": "\n                <div class=\"driver-asset\">\n                    <div class=\"driver-asset-icon\">📦</div>\n                    <div class=\"driver-asset-info\">\n                        <div class=\"driver-asset-title\">v6.9.1.4</div>\n                        <div class=\"driver-asset-meta\">File: v6.9.1.4.rar | Size: 6503KB</div>\n                    </div>\n                    <a href=\"/מדריכים/דרייברים/v6.9.1.4.rar\" class=\"btn-download\" download>Download File</a>\n                </div>\n                "
-            },
-            {
-                "id": "a43e26b9-acd5-4878-a487-6ee75dac2013",
-                "title": "דרייבר 820",
-                "content": "\n                <div class=\"driver-asset\">\n                    <div class=\"driver-asset-icon\">📦</div>\n                    <div class=\"driver-asset-info\">\n                        <div class=\"driver-asset-title\">דרייבר 820</div>\n                        <div class=\"driver-asset-meta\">File: דרייבר 820.rar | Size: 9025KB</div>\n                    </div>\n                    <a href=\"/מדריכים/דרייברים/%D7%93%D7%A8%D7%99%D7%99%D7%91%D7%A8%20820.rar\" class=\"btn-download\" download>Download File</a>\n                </div>\n                "
-            },
-            {
-                "id": "b095ce44-ed8f-4a62-9638-511146ebff0a",
-                "title": "טמפר 805",
-                "content": "\n                <div class=\"driver-asset\">\n                    <div class=\"driver-asset-icon\">📦</div>\n                    <div class=\"driver-asset-info\">\n                        <div class=\"driver-asset-title\">טמפר 805</div>\n                        <div class=\"driver-asset-meta\">File: טמפר 805.rar | Size: 4139KB</div>\n                    </div>\n                    <a href=\"/מדריכים/דרייברים/%D7%98%D7%9E%D7%A4%D7%A8%20805.rar\" class=\"btn-download\" download>Download File</a>\n                </div>\n                "
-            }
-        ],
-        "subCategories": []
     }
 ]
