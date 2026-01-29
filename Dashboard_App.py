@@ -419,50 +419,51 @@ class DataEngine:
             try:
                 doc = db.collection('data').document('integrations').get()
                 if doc.exists:
-                    data = doc.to_dict().get('list', [])
+                    raw = doc.to_dict()
+                    data = raw.get('list', []) if isinstance(raw, dict) else raw
                     if data:
-                        log(f"DataEngine: Loaded {len(data)} integrations from Firestore.")
+                        log(f"DataEngine: Loaded {len(data)} from Firestore.")
                         return data
-                log("DataEngine: Firestore integrations document empty or missing.")
-            except Exception as e:
-                err_log(f"Firestore Integrations load error: {e}")
+            except Exception as e: err_log(f"Firestore Integrations error: {e}")
 
         # 2. Local fallback
         try:
             p = os.path.join(BASE_DIR, "integrations_db.json")
-            log(f"DataEngine: Trying local fallback at {p}")
             if os.path.exists(p):
                 with open(p, 'r', encoding='utf-8-sig') as f:
-                    data = json.load(f).get('list', [])
-                    log(f"DataEngine: Loaded {len(data)} integrations from local JSON.")
+                    raw = json.load(f)
+                    data = raw.get('list', []) if isinstance(raw, dict) else raw
+                    log(f"DataEngine: Loaded {len(data)} from local JSON.")
                     return data
-            else:
-                log(f"DataEngine: Local file missing at {p}")
-        except Exception as e:
-            err_log(f"Integrations load error: {e}")
+        except Exception as e: err_log(f"Integrations fallback error: {e}")
         return []
 
     @staticmethod
     def get_guides_categories():
-        """Fetch categories from Firestore if available, otherwise fallback to index.html default logic"""
+        log("DataEngine: Loading categories...")
         if db:
             try:
                 cats = list(db.collection('guides_categories').stream())
-                if cats:
-                    # Sort to have 'KB-Guides' first or keep manual order
-                    return [c.to_dict() for c in cats]
-            except Exception as e:
-                err_log(f"Firestore categories load error: {e}")
+                if cats: return [c.to_dict() for c in cats]
+            except Exception as e: err_log(f"Firestore Categories error: {e}")
         
-        # Static defaults if Firestore fails
+        # Local Fallback
+        try:
+            p = os.path.join(BASE_DIR, "guides_db.json")
+            if os.path.exists(p):
+                with open(p, 'r', encoding='utf-8-sig') as f:
+                    data = json.load(f)
+                    if isinstance(data, list): return data
+                    if isinstance(data, dict): return data.get('categories') or data.get('list') or []
+        except Exception as e: err_log(f"Guides fallback error: {e}")
+        
+        # Static defaults
         return [
             {"id": "kb", "name": "מרכז ידע ונהלים", "emoji": "📚", "type": "kb", "subCategories": [
-                {"id": "kb-guides", "name": "מדריכי מערכת"},
-                {"id": "kb-policy", "name": "נהלי עבודה"}
+                {"id": "kb-guides", "name": "מדריכי מערכת"}, {"id": "kb-policy", "name": "נהלי עבודה"}
             ]},
             {"id": "integrations", "name": "אינטגרציות וחיבורים", "emoji": "🔌", "type": "kb", "subCategories": [
-                {"id": "int-verifone", "name": "וריפון"},
-                {"id": "int-third-party", "name": "צד ג'"}
+                {"id": "int-verifone", "name": "וריפון"}, {"id": "int-third-party", "name": "צד ג'"}
             ]}
         ]
 
