@@ -136,14 +136,15 @@ CACHE = {}
 CACHE_TTL = 300 # 5 Minutes
 
 # Helper from TIER2.PY
+def get_now_utc():
+    return datetime.now(timezone.utc)
+
 def ensure_utc(dt):
     try:
         if dt is None: return None
         if dt.tzinfo is None:
-            import pytz
-            return dt.replace(tzinfo=pytz.UTC)
-        import pytz
-        return dt.astimezone(pytz.UTC)
+            return dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc)
     except: return dt
 
 # API Configs from scripts
@@ -662,17 +663,20 @@ class handler(http.server.SimpleHTTPRequestHandler):
     def is_authenticated(self):
         cookies = http.cookies.SimpleCookie(self.headers.get('Cookie'))
         sid = cookies.get('sid')
-        if not sid: return False
+        if not sid: 
+            # log("is_authenticated: No sid cookie found")
+            return False
         
         sid_val = sid.value
+        now = get_now_utc()
+        
         # 1. Check in-memory for speed
         if sid_val in SESSIONS:
             sess = SESSIONS[sid_val]
-            # Convert to naive for comparison or use timezone-aware
-            exp = sess.get('expiry')
-            if isinstance(exp, str): exp = datetime.fromisoformat(exp)
-            if exp.replace(tzinfo=None) > datetime.now():
+            exp = ensure_utc(sess.get('expiry'))
+            if exp and exp > now:
                 return True
+            log(f"Session Trace: Memory expiry failure for {sess.get('user')}. Exp: {exp}, Now: {now}")
         
         # 2. Check Firestore for persistence (Vercel)
         if db:
@@ -680,19 +684,34 @@ class handler(http.server.SimpleHTTPRequestHandler):
                 doc = db.collection('sessions').document(sid_val).get()
                 if doc.exists:
                     data = doc.to_dict()
-                    exp_raw = data.get('expiry')
-                    if isinstance(exp_raw, str):
-                        exp = datetime.fromisoformat(exp_raw)
-                    else:
-                        exp = exp_raw
+                    exp = ensure_utc(data.get('expiry'))
                     
-                    if exp.replace(tzinfo=None) > datetime.now():
+                    if exp and exp > now:
                         # Sync back to memory
                         SESSIONS[sid_val] = data
                         return True
+                    log(f"Session Trace: Firestore expiry failure for {data.get('user')}. Exp: {exp}, Now: {now}")
+                else:
+                    log(f"Session Trace: SID {sid_val[:8]} not in Firestore")
             except Exception as e:
                 err_log(f"Session verification error: {e}")
         return False
+
+    def save_session(self, sid, email):
+        now = get_now_utc()
+        ext_expiry = now + timedelta(days=1)
+        sess_data = {
+            "user": email, 
+            "expiry": ext_expiry,
+            "created_at": now
+        }
+        SESSIONS[sid] = sess_data
+        log(f"Session Trace: Saving session {sid[:8]} for {email}. Expiry: {ext_expiry}")
+        if db:
+            try:
+                db.collection('sessions').document(sid).set(sess_data)
+            except Exception as e:
+                err_log(f"Session save error: {e}")
 
     def do_GET(self):
         try:
@@ -869,17 +888,20 @@ class handler(http.server.SimpleHTTPRequestHandler):
                 log(f"Login Attempt: Fallback auth for {email}")
                 if email in AUTHORIZED_USERS and password == AUTHORIZED_USERS[email]:
                     sid = str(uuid.uuid4())
-                    log(f"Fallback Login Success: {email}, Session: {sid}")
+                    log(f"Fallback Login Success: {email}, Session: {sid[:8]}")
                     self.save_session(sid, email)
-                    self.send_response(302)
+                    # Respond with JSON status for consistency
+                    self.send_response(200)
+                    self.send_header('Content-Type', 'application/json')
                     self.send_header('Set-Cookie', f'sid={sid}; HttpOnly; Path=/; SameSite=Lax; Max-Age=86400')
-                    self.send_header('Location', '/')
                     self.end_headers()
+                    self.wfile.write(json.dumps({"status": "url", "url": "/"}).encode())
                 else:
                     log(f"Fallback Login Failed: Invalid credentials for {email}")
-                    self.send_response(302)
-                    self.send_header('Location', '/login?error=1')
+                    self.send_response(401)
+                    self.send_header('Content-Type', 'application/json')
                     self.end_headers()
+                    self.wfile.write(json.dumps({"status": "error", "message": "Invalid credentials"}).encode())
                 return
 
             if not self.is_authenticated():
