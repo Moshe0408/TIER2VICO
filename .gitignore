@@ -12,7 +12,7 @@
 !לקוחות/
 !מדריכים/
 # Ignore contents of uploads
-uploads/
+!uploads/
 # התעלם מתיקיות פנימיות וזבל של מערכת הפעלה
 __pycache__/
 .DS_Store
