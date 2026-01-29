@@ -3,11 +3,14 @@
 
 # אל תתעלם מהקבצים האלו (Whitelist)
 !.gitignore
-!Dashboard_App.py
+!api/
 !guides_db.json
 !integrations_db.json
 !vercel.json
 !requirements.txt
+!.vercelignore
+!לקוחות/
+!מדריכים/
 # Ignore contents of uploads
 uploads/
 # התעלם מתיקיות פנימיות וזבל של מערכת הפעלה

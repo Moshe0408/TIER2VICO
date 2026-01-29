@@ -1,0 +1,27 @@
+# Data folders that definitely exceed limit
+לקוחות/
+מדריכים/
+uploads/
+Verint_Reports/
+logs_stf/
+Digital/
+TIER2/
+lovable/
+
+# Large individual files
+*.pptx
+*.zip
+*.rar
+*.exe
+*.pdf
+*.docx
+*.xlsx
+
+# Standard ignores
+venv/
+.venv/
+node_modules/
+__pycache__/
+.git/
+.DS_Store
+Thumbs.db
