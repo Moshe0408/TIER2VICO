@@ -3,7 +3,10 @@
     "builds": [
         {
             "src": "Dashboard_App.py",
-            "use": "@vercel/python"
+            "use": "@vercel/python",
+            "config": {
+                "includeFiles": "uploads/**"
+            }
         }
     ],
     "routes": [

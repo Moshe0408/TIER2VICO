@@ -1780,7 +1780,7 @@ class handler(http.server.SimpleHTTPRequestHandler):
                 </div>
                 <div class="input-group" style="grid-column: span 2;">
                     <label style="color:var(--dim); font-size:12px">CATEGORY (e.g. Retail, Food, Luxury)</label>
-                    <input type="text" id="edit-project-cat" list="project-cat-list" style="width:100%; box-sizing:border-box" placeholder="Select or type category...">
+                    <input type="text" id="edit-project-cat" list="project-cat-list" style="width:100%; box-sizing:border-box" placeholder="Select or TYPE NEW Name to Create Tab...">
                     <datalist id="project-cat-list">
                         <option value="Retail">
                         <option value="Food & Beverage">
