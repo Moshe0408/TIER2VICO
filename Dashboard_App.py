@@ -660,26 +660,38 @@ class DataEngine:
 
 class handler(http.server.SimpleHTTPRequestHandler):
     def is_authenticated(self):
-        cookie_header = self.headers.get('Cookie')
-        if not cookie_header: 
-            return False
-        try:
-            cookie = http.cookies.SimpleCookie(cookie_header)
-            sid = cookie.get('sid')
-            if sid:
-                val = sid.value
-                if val in SESSIONS:
-                    sess = SESSIONS[val]
-                    if datetime.now() < sess['expiry']:
-                        return True
+        cookies = http.cookies.SimpleCookie(self.headers.get('Cookie'))
+        sid = cookies.get('sid')
+        if not sid: return False
+        
+        sid_val = sid.value
+        # 1. Check in-memory for speed
+        if sid_val in SESSIONS:
+            sess = SESSIONS[sid_val]
+            # Convert to naive for comparison or use timezone-aware
+            exp = sess.get('expiry')
+            if isinstance(exp, str): exp = datetime.fromisoformat(exp)
+            if exp.replace(tzinfo=None) > datetime.now():
+                return True
+        
+        # 2. Check Firestore for persistence (Vercel)
+        if db:
+            try:
+                doc = db.collection('sessions').document(sid_val).get()
+                if doc.exists:
+                    data = doc.to_dict()
+                    exp_raw = data.get('expiry')
+                    if isinstance(exp_raw, str):
+                        exp = datetime.fromisoformat(exp_raw)
                     else:
-                        log(f"Session expired for {sess.get('user')}")
-                else:
-                    log(f"Session ID {val} not found in SESSIONS")
-            else:
-                log("Cookie 'sid' missing in request")
-        except Exception as e:
-            err_log(f"Auth Check Error: {e}")
+                        exp = exp_raw
+                    
+                    if exp.replace(tzinfo=None) > datetime.now():
+                        # Sync back to memory
+                        SESSIONS[sid_val] = data
+                        return True
+            except Exception as e:
+                err_log(f"Session verification error: {e}")
         return False
 
     def do_GET(self):
@@ -702,14 +714,27 @@ class handler(http.server.SimpleHTTPRequestHandler):
                 self.send_response(200); self.send_header('Content-type','text/html;charset=utf-8'); self.end_headers()
                 self.wfile.write(self.get_ui().encode('utf-8'))
             elif self.path.startswith('/api/stats'):
-                log("Handling /api/stats (Full Cloud Structure Sync)")
-                data = {
-                    "Integrations": DataEngine.get_integrations(),
-                    "GuidesCategories": DataEngine.get_guides_categories(),
-                    "CustomerLogos": CUSTOMER_LOGOS
-                }
-                self.send_response(200); self.send_header('Content-Type','application/json'); self.end_headers()
-                self.wfile.write(json.dumps(data, default=str).encode('utf-8'))
+                log(f"Handling /api/stats for {getattr(self, 'current_user', 'authorized')}")
+                try:
+                    integrations = DataEngine.get_integrations()
+                    categories = DataEngine.get_guides_categories()
+                    log(f"Stats Trace: Integrations={len(integrations)}, Cats={len(categories)}")
+                    
+                    data = {
+                        "Integrations": integrations,
+                        "GuidesCategories": categories,
+                        "CustomerLogos": CUSTOMER_LOGOS,
+                        "Debug": {
+                            "firebase": db is not None,
+                            "count": len(integrations),
+                            "timestamp": datetime.now().isoformat()
+                        }
+                    }
+                    self.send_response(200); self.send_header('Content-Type','application/json'); self.end_headers()
+                    self.wfile.write(json.dumps(data, default=str).encode('utf-8'))
+                except Exception as e:
+                    err_log(f"API Stats Error: {e}")
+                    self.send_error(500, str(e))
             elif self.path.startswith('/api/guides'):
                 # Extract category filter if present
                 qs = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
@@ -822,13 +847,9 @@ class handler(http.server.SimpleHTTPRequestHandler):
                     
                     if success:
                         sid = str(uuid.uuid4())
-                        SESSIONS[sid] = {
-                            "user": email,
-                            "expiry": datetime.now() + timedelta(days=1)
-                        }
+                        self.save_session(sid, email)
                         self.send_response(200)
                         self.send_header('Content-Type', 'application/json')
-                        # Robust Cookie header
                         self.send_header('Set-Cookie', f'sid={sid}; HttpOnly; Path=/; SameSite=Lax; Max-Age=86400')
                         self.end_headers()
                         self.wfile.write(json.dumps({"status": "url", "url": "/"}).encode())
@@ -844,7 +865,7 @@ class handler(http.server.SimpleHTTPRequestHandler):
                 
                 if email in AUTHORIZED_USERS and password == AUTHORIZED_USERS[email]:
                     sid = str(uuid.uuid4())
-                    SESSIONS[sid] = {"user": email, "expiry": datetime.now() + timedelta(days=1)}
+                    self.save_session(sid, email)
                     self.send_response(302)
                     self.send_header('Set-Cookie', f'sid={sid}; HttpOnly; Path=/; SameSite=Lax; Max-Age=86400')
                     self.send_header('Location', '/')
