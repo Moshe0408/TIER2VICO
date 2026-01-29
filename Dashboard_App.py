@@ -605,7 +605,7 @@ class DataEngine:
         p = os.path.join(BASE_DIR, "guides_db.json")
         if os.path.exists(p):
             try:
-                with open(p, 'r', encoding='utf-8') as f:
+                with open(p, 'r', encoding='utf-8-sig') as f:
                     return json.load(f)
             except Exception as e:
                 err_log(f"Guides load error: {e}")
