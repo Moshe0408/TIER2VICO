@@ -48,6 +48,32 @@ try:
     HAS_FIREBASE = True
 except ImportError:
     HAS_FIREBASE = False
+
+# Google Drive API
+try:
+    from google.oauth2 import service_account
+    from googleapiclient.discovery import build
+    from googleapiclient.http import MediaFileUpload, MediaIoBaseUpload
+    import io
+    HAS_GDRIVE = True
+    
+    # Initialize Google Drive
+    GDRIVE_CREDS_FILE = os.path.join(os.path.dirname(__file__), 'google-drive-credentials.json')
+    GDRIVE_FOLDER_ID = "13jBR4dJOhojtf63_mGYLeoAqiqP7KjJs"  # Dashboard-Uploads folder
+    
+    if os.path.exists(GDRIVE_CREDS_FILE):
+        GDRIVE_CREDS = service_account.Credentials.from_service_account_file(
+            GDRIVE_CREDS_FILE,
+            scopes=['https://www.googleapis.com/auth/drive.file']
+        )
+        GDRIVE_SERVICE = build('drive', 'v3', credentials=GDRIVE_CREDS)
+        log("Google Drive API initialized successfully")
+    else:
+        HAS_GDRIVE = False
+        log("Google Drive credentials file not found")
+except ImportError as e:
+    HAS_GDRIVE = False
+    log(f"Google Drive API not available: {e}")
     log("FIREBASE SDK NOT FOUND - Falling back to local auth")
 
 # --- FIREBASE SETUP ---
@@ -1076,10 +1102,50 @@ class handler(http.server.SimpleHTTPRequestHandler):
                             elif file_content.endswith(b'\r'):
                                 file_content = file_content[:-1]
                             
+                            # Upload to Google Drive if available, otherwise save locally
+                            if HAS_GDRIVE:
+                                try:
+                                    from googleapiclient.http import MediaIoBaseUpload
+                                    import io
+                                    
+                                    file_metadata = {
+                                        'name': safe_name,
+                                        'parents': [GDRIVE_FOLDER_ID]
+                                    }
+                                    media = MediaIoBaseUpload(
+                                        io.BytesIO(file_content),
+                                        mimetype='application/octet-stream',
+                                        resumable=True
+                                    )
+                                    
+                                    file = GDRIVE_SERVICE.files().create(
+                                        body=file_metadata,
+                                        media_body=media,
+                                        fields='id, webViewLink, webContentLink'
+                                    ).execute()
+                                    
+                                    # Make file publicly accessible
+                                    GDRIVE_SERVICE.permissions().create(
+                                        fileId=file['id'],
+                                        body={'type': 'anyone', 'role': 'reader'}
+                                    ).execute()
+                                    
+                                    # Generate direct download link
+                                    download_url = f"https://drive.google.com/uc?export=download&id={file['id']}"
+                                    
+                                    log(f"SUCCESS: Uploaded {filename} ({len(file_content)} bytes) to Google Drive as {safe_name}")
+                                    self.send_response(200); self.send_header('Content-Type','application/json'); self.end_headers()
+                                    self.wfile.write(json.dumps({"url": download_url, "name": filename, "gdrive_id": file['id']}).encode())
+                                    return
+                                except Exception as e:
+                                    err_log(f"Google Drive upload failed: {e}, falling back to local storage")
+                                    # Fall through to local storage
+                            
+                            # Fallback: Save locally
                             with open(os.path.join(UPLOAD_DIR, safe_name), 'wb') as f:
                                 f.write(file_content)
                             
-                            log(f"SUCCESS: Uploaded {filename} ({len(file_content)} bytes) as {safe_name}")
+                            log(f"SUCCESS: Uploaded {filename} ({len(file_content)} bytes) as {safe_name} (local)")
                             self.send_response(200); self.send_header('Content-Type','application/json'); self.end_headers()
                             self.wfile.write(json.dumps({"url": f"/uploads/{safe_name}", "name": filename}).encode())
                             return
@@ -2413,8 +2479,12 @@ class handler(http.server.SimpleHTTPRequestHandler):
             const status = document.getElementById('cust-upload-status');
             status.innerText = "UPLOADING...";
             
+            const formData = new FormData();
+            formData.append('file', input.files[0]);
+            
             try {
-                const data = await uploadToFirebaseStorage(input.files[0]);
+                const resp = await fetch('/api/upload', { method: 'POST', body: formData });
+                const data = await resp.json();
                 document.getElementById(targetId).value = data.url;
                 status.innerText = "UPLOAD SUCCESSFUL!";
                 setTimeout(() => status.innerText = "", 3000);
@@ -2428,8 +2498,15 @@ class handler(http.server.SimpleHTTPRequestHandler):
             const status = document.getElementById('upload-status');
             status.innerText = "UPLOADING...";
             
+            const formData = new FormData();
+            formData.append('file', input.files[0]);
+            
             try {
-                const data = await uploadToFirebaseStorage(input.files[0]);
+                const resp = await fetch('/api/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await resp.json();
                 currentGuideImages.push(data.url);
                 renderGuideImages();
                 status.innerText = "SUCCESS";
@@ -2513,7 +2590,8 @@ class handler(http.server.SimpleHTTPRequestHandler):
                         const uploadId = 'up-' + Date.now();
                         document.execCommand('insertHTML', false, `<i id="${uploadId}">[Uploading Image...]</i>`);
                         
-                        const data = await uploadToFirebaseStorage(blob);
+                        const resp = await fetch('/api/upload', { method: 'POST', body: formData });
+                        const data = await resp.json();
                         
                         const placeholder = document.getElementById(uploadId);
                         if(placeholder) {
@@ -2537,8 +2615,11 @@ class handler(http.server.SimpleHTTPRequestHandler):
             btn.disabled = true;
 
             try {
-                // First upload the file to Firebase Storage
-                const uploadData = await uploadToFirebaseStorage(input.files[0]);
+                // First upload the file
+                const formData = new FormData();
+                formData.append('file', file);
+                const uploadResp = await fetch('/api/upload', { method: 'POST', body: formData });
+                const uploadData = await uploadResp.json();
                 
                 // Then extract its content
                 const extractResp = await fetch('/api/extract-content', {
