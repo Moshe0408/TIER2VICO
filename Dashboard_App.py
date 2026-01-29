@@ -2039,16 +2039,28 @@ class handler(http.server.SimpleHTTPRequestHandler):
         async function refresh() {
             try {
                 const res = await fetch('/api/stats');
+                if (!res.ok) {
+                    if (res.status === 401 || res.status === 403) {
+                        window.location.href = '/login';
+                        return;
+                    }
+                    throw new Error(`API returned ${res.status}`);
+                }
                 const data = await res.json();
                 stats_data = data;
                 
-                // Set guides_data from the new structural field
                 if (data.GuidesCategories) {
                     guides_data = data.GuidesCategories;
                 }
                 
                 update();
-            } catch(e) { console.error("Poll error", e); }
+            } catch(e) { 
+                console.error("Poll error:", e);
+                if (e.message.includes('Unexpected token')) {
+                    console.warn("Likely received HTML instead of JSON. Redirecting...");
+                    window.location.href = '/login';
+                }
+            }
         }
         function nav(s) {
             sect = s;
