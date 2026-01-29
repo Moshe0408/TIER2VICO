@@ -912,7 +912,7 @@ class handler(http.server.SimpleHTTPRequestHandler):
                     err_log(f"Report Generation Error: {e}")
                     self.send_error(500, str(e))
                 return
-            elif any(self.path.startswith(p) for p in ['/uploads/', '/מדריכים/', '/TIER2/', '/Digital/', '/csv/']):
+            elif any(self.path.startswith(p) for p in ['/uploads/', '/מדריכים/', '/לקוחות/', '/TIER2/', '/Digital/', '/csv/']):
                 # Generalized local file server with correct mime types
                 try:
                     rel_path = urllib.parse.unquote(self.path[1:])
