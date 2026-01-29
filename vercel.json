@@ -1,15 +1,9 @@
 {
     "version": 2,
-    "builds": [
+    "rewrites": [
         {
-            "src": "Dashboard_App.py",
-            "use": "@vercel/python"
-        }
-    ],
-    "routes": [
-        {
-            "src": "/(.*)",
-            "dest": "Dashboard_App.py"
+            "source": "/(.*)",
+            "destination": "/api/index.py"
         }
     ]
 }
