@@ -1,27 +1,46 @@
-# Data folders that definitely exceed limit
-לקוחות/
-מדריכים/
+# Aggressive ignore to stay under 250MB
+.git/
+.venv/
+venv/
+__pycache__/
+node_modules/
 
+# Data Folders (with wildcards for encoding safety)
+*לקוחות*
+*מדריכים*
 Verint_Reports/
 logs_stf/
 Digital/
 TIER2/
 lovable/
+csv/
+logs/
+uploads/
+Verint_Reports/
 
-# Large individual files
+# Global file extensions (large assets)
 *.pptx
 *.zip
 *.rar
 *.exe
 *.pdf
 *.docx
+*.doc
 *.xlsx
+*.xls
+*.csv
+*.mp4
+*.gif
+*.jpg
+*.jpeg
+*.png
+*.png
+*.ico
 
-# Standard ignores
-venv/
-.venv/
-node_modules/
-__pycache__/
-.git/
+# Other
 .DS_Store
 Thumbs.db
+*.pyc
+*.pyo
+*.tmp
+*.bak
