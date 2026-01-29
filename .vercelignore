@@ -1,13 +1,32 @@
-# Aggressive ignore to stay under 250MB
+# Nuclear ignore - block all subdirectories and large assets
 .git/
-.venv/
 venv/
+.venv/
 __pycache__/
 node_modules/
 
-# Data Folders (with wildcards for encoding safety)
-*לקוחות*
-*מדריכים*
+# Block EVERY subdirectory by pattern
+/*/
+/**/*/
+
+# Block all large file types globally
+**/*.zip
+**/*.exe
+**/*.pptx
+**/*.pdf
+**/*.docx
+**/*.xlsx
+**/*.xls
+**/*.rar
+**/*.mp4
+**/*.gif
+**/*.jpg
+**/*.jpeg
+**/*.png
+**/*.ico
+**/*.csv
+
+# Specific large folders (redundant but safe)
 Verint_Reports/
 logs_stf/
 Digital/
@@ -16,28 +35,14 @@ lovable/
 csv/
 logs/
 uploads/
-Verint_Reports/
 
-# Global file extensions (large assets)
-*.pptx
-*.zip
-*.rar
-*.exe
-*.pdf
-*.docx
-*.doc
-*.xlsx
-*.xls
-*.csv
-*.mp4
-*.gif
-*.jpg
-*.jpeg
-*.png
-*.png
-*.ico
+# Build artifacts
+.vercel/
+.next/
+dist/
+build/
 
-# Other
+# Standard ignores
 .DS_Store
 Thumbs.db
 *.pyc
