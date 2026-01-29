@@ -6,3 +6,5 @@ openpyxl
 python-docx
 PyPDF2
 mammoth
+google-auth
+google-api-python-client

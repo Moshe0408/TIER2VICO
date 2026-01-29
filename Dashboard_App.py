@@ -1144,21 +1144,24 @@ class handler(http.server.SimpleHTTPRequestHandler):
                                     # Generate direct download link
                                     download_url = f"https://drive.google.com/uc?export=download&id={file['id']}"
                                     
-                                    log(f"SUCCESS: Uploaded {filename} ({len(file_content)} bytes) to Google Drive as {safe_name}")
+                                    log(f"SUCCESS: Uploaded {filename} to Google Drive as {safe_name}")
                                     self.send_response(200); self.send_header('Content-Type','application/json'); self.end_headers()
                                     self.wfile.write(json.dumps({"url": download_url, "name": filename, "gdrive_id": file['id']}).encode())
                                     return
                                 except Exception as e:
-                                    err_log(f"Google Drive upload failed: {e}, falling back to local storage")
-                                    # Fall through to local storage
+                                    err_log(f"Google Drive upload failed: {e}")
+                                    # Fall through to local storage if fail
                             
                             # Fallback: Save locally
-                            with open(os.path.join(UPLOAD_DIR, safe_name), 'wb') as f:
-                                f.write(file_content)
-                            
-                            log(f"SUCCESS: Uploaded {filename} ({len(file_content)} bytes) as {safe_name} (local)")
-                            self.send_response(200); self.send_header('Content-Type','application/json'); self.end_headers()
-                            self.wfile.write(json.dumps({"url": f"/uploads/{safe_name}", "name": filename}).encode())
+                            try:
+                                with open(os.path.join(UPLOAD_DIR, safe_name), 'wb') as f:
+                                    f.write(file_content)
+                                log(f"SUCCESS: Uploaded {filename} as {safe_name} (local fallback)")
+                                self.send_response(200); self.send_header('Content-Type','application/json'); self.end_headers()
+                                self.wfile.write(json.dumps({"url": f"/uploads/{safe_name}", "name": filename, "warning": "local_storage_not_persistent"}).encode())
+                            except Exception as e:
+                                err_log(f"Local storage fallback failed: {e}")
+                                self.send_error(500, f"Upload failed: {str(e)}")
                             return
                 
                 err_log("Upload failed: No valid file parts with filename found.")
