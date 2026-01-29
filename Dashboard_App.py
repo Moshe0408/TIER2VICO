@@ -917,6 +917,7 @@ class handler(http.server.SimpleHTTPRequestHandler):
                 try:
                     rel_path = urllib.parse.unquote(self.path[1:])
                     fpath = os.path.join(BASE_DIR, rel_path)
+                    log(f"DEBUG: Request: {self.path}, Rel: {rel_path}, Full: {fpath}, Exist: {os.path.exists(fpath)}")
                     
                     if os.path.exists(fpath) and os.path.isfile(fpath):
                         self.send_response(200)

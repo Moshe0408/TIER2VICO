@@ -2,8 +2,11 @@
     "version": 2,
     "builds": [
         {
-            "src": "Dashboard_App.py",
-            "use": "@vercel/python"
+            "src": ".",
+            "use": "@vercel/python",
+            "config": {
+                "maxLambdaSize": "15mb"
+            }
         }
     ],
     "routes": [
