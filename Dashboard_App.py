@@ -61,16 +61,27 @@ try:
     GDRIVE_CREDS_FILE = os.path.join(os.path.dirname(__file__), 'google-drive-credentials.json')
     GDRIVE_FOLDER_ID = "13jBR4dJOhojtf63_mGYLeoAqiqP7KjJs"  # Dashboard-Uploads folder
     
-    if os.path.exists(GDRIVE_CREDS_FILE):
+    # Try to load credentials from environment variable first (for Vercel)
+    gdrive_creds_json = os.environ.get('GOOGLE_DRIVE_CREDENTIALS')
+    if gdrive_creds_json:
+        import json
+        creds_data = json.loads(gdrive_creds_json)
+        GDRIVE_CREDS = service_account.Credentials.from_service_account_info(
+            creds_data,
+            scopes=['https://www.googleapis.com/auth/drive.file']
+        )
+        GDRIVE_SERVICE = build('drive', 'v3', credentials=GDRIVE_CREDS)
+        log("Google Drive API initialized from environment variable")
+    elif os.path.exists(GDRIVE_CREDS_FILE):
         GDRIVE_CREDS = service_account.Credentials.from_service_account_file(
             GDRIVE_CREDS_FILE,
             scopes=['https://www.googleapis.com/auth/drive.file']
         )
         GDRIVE_SERVICE = build('drive', 'v3', credentials=GDRIVE_CREDS)
-        log("Google Drive API initialized successfully")
+        log("Google Drive API initialized from credentials file")
     else:
         HAS_GDRIVE = False
-        log("Google Drive credentials file not found")
+        log("Google Drive credentials not found (neither env var nor file)")
 except ImportError as e:
     HAS_GDRIVE = False
     log(f"Google Drive API not available: {e}")
