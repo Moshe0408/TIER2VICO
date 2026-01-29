@@ -833,9 +833,10 @@ class handler(http.server.SimpleHTTPRequestHandler):
                     
                     success = False
                     if HAS_FIREBASE and id_token:
+                        log(f"Login Attempt: Firebase token verification for {email}")
                         if not firebase_admin._apps:
-                            log(f"ALERT: Non-verified login for {email} (Missing serviceAccountKey.json)")
-                            success = True # Allow for development ease
+                            log(f"ALERT: Non-verified login for {email} (Firebase not initialized, allowing for dev)")
+                            success = True 
                         else:
                             try:
                                 # Verify the token with Firebase Admin
@@ -847,6 +848,7 @@ class handler(http.server.SimpleHTTPRequestHandler):
                     
                     if success:
                         sid = str(uuid.uuid4())
+                        log(f"Login Success: {email}, Session: {sid}")
                         self.save_session(sid, email)
                         self.send_response(200)
                         self.send_header('Content-Type', 'application/json')
@@ -855,6 +857,7 @@ class handler(http.server.SimpleHTTPRequestHandler):
                         self.wfile.write(json.dumps({"status": "url", "url": "/"}).encode())
                         return
                     else:
+                        log(f"Login Failed: Firebase auth failed for {email}")
                         self.send_response(401); self.end_headers()
                     return
 
@@ -863,14 +866,17 @@ class handler(http.server.SimpleHTTPRequestHandler):
                 email = params.get('email', [''])[0].strip()
                 password = params.get('password', [''])[0].strip()
                 
+                log(f"Login Attempt: Fallback auth for {email}")
                 if email in AUTHORIZED_USERS and password == AUTHORIZED_USERS[email]:
                     sid = str(uuid.uuid4())
+                    log(f"Fallback Login Success: {email}, Session: {sid}")
                     self.save_session(sid, email)
                     self.send_response(302)
                     self.send_header('Set-Cookie', f'sid={sid}; HttpOnly; Path=/; SameSite=Lax; Max-Age=86400')
                     self.send_header('Location', '/')
                     self.end_headers()
                 else:
+                    log(f"Fallback Login Failed: Invalid credentials for {email}")
                     self.send_response(302)
                     self.send_header('Location', '/login?error=1')
                     self.end_headers()
@@ -1236,20 +1242,41 @@ class handler(http.server.SimpleHTTPRequestHandler):
             msg.style.display = 'none';
 
             try {
-                const userCredential = await signInWithEmailAndPassword(auth, email, pass);
-                const idToken = await userCredential.user.getIdToken();
+                // 1. Try Firebase Auth
+                try {
+                    const userCredential = await signInWithEmailAndPassword(auth, email, pass);
+                    const idToken = await userCredential.user.getIdToken();
+                    
+                    const response = await fetch('/login', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ idToken, email })
+                    });
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        window.location.href = data.url;
+                        return;
+                    }
+                } catch (fbErr) {
+                    console.warn("Firebase auth failed, trying local fallback:", fbErr);
+                }
+
+                // 2. Try Local Fallback (Standard POST)
+                const formData = new URLSearchParams();
+                formData.append('email', email);
+                formData.append('password', pass);
                 
                 const response = await fetch('/login', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ idToken, email })
+                    body: formData,
+                    redirect: 'follow'
                 });
 
-                if (response.ok) {
-                    const data = await response.json();
-                    window.location.href = data.url;
+                if (response.ok && !response.url.includes('error=1')) {
+                    window.location.href = '/';
                 } else {
-                    throw new Error("Validation failure");
+                    throw new Error("אימות נכשל");
                 }
             } catch (error) {
                 console.error(error);
