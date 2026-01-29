@@ -413,23 +413,33 @@ class DataEngine:
 
     @staticmethod
     def get_integrations():
+        log("DataEngine: Loading integrations...")
+        # 1. Try Firestore
         if db:
             try:
-                # Load from Firestore 'data' collection, 'integrations' document
                 doc = db.collection('data').document('integrations').get()
                 if doc.exists:
-                    return doc.to_dict().get('list', [])
+                    data = doc.to_dict().get('list', [])
+                    if data:
+                        log(f"DataEngine: Loaded {len(data)} integrations from Firestore.")
+                        return data
+                log("DataEngine: Firestore integrations document empty or missing.")
             except Exception as e:
                 err_log(f"Firestore Integrations load error: {e}")
-        
-        # Local fallback
-        p = os.path.join(BASE_DIR, "integrations_db.json")
-        if os.path.exists(p):
-            try:
-                with open(p, 'r', encoding='utf-8') as f:
-                    return json.load(f)
-            except Exception as e:
-                err_log(f"Integrations load error: {e}")
+
+        # 2. Local fallback
+        try:
+            p = os.path.join(BASE_DIR, "integrations_db.json")
+            log(f"DataEngine: Trying local fallback at {p}")
+            if os.path.exists(p):
+                with open(p, 'r', encoding='utf-8-sig') as f:
+                    data = json.load(f).get('list', [])
+                    log(f"DataEngine: Loaded {len(data)} integrations from local JSON.")
+                    return data
+            else:
+                log(f"DataEngine: Local file missing at {p}")
+        except Exception as e:
+            err_log(f"Integrations load error: {e}")
         return []
 
     @staticmethod
@@ -715,8 +725,8 @@ class handler(http.server.SimpleHTTPRequestHandler):
 
     def do_GET(self):
         try:
-            # Bypass auth for static files if needed, but here we only have / and /api
-            if self.path == '/login':
+            path = self.path.split('?')[0] # Strip query string for routing
+            if path == '/login':
                 self.send_response(200)
                 self.send_header('Content-type', 'text/html; charset=utf-8')
                 self.end_headers()
@@ -729,24 +739,24 @@ class handler(http.server.SimpleHTTPRequestHandler):
                 self.end_headers()
                 return
 
-            if self.path == '/':
+            if path in ['/', '/index.html']:
                 self.send_response(200); self.send_header('Content-type','text/html;charset=utf-8'); self.end_headers()
                 self.wfile.write(self.get_ui().encode('utf-8'))
-            elif self.path.startswith('/api/stats'):
-                log(f"Handling /api/stats for {getattr(self, 'current_user', 'authorized')}")
+                return
+            
+            if path == '/api/stats':
+                log(f"Handling /api/stats (Trace: {self.headers.get('Cookie')})")
                 try:
                     integrations = DataEngine.get_integrations()
                     categories = DataEngine.get_guides_categories()
-                    log(f"Stats Trace: Integrations={len(integrations)}, Cats={len(categories)}")
-                    
                     data = {
                         "Integrations": integrations,
                         "GuidesCategories": categories,
                         "CustomerLogos": CUSTOMER_LOGOS,
-                        "Debug": {
+                        "Health": {
                             "firebase": db is not None,
                             "count": len(integrations),
-                            "timestamp": datetime.now().isoformat()
+                            "vercel": os.environ.get('VERCEL') is not None
                         }
                     }
                     self.send_response(200); self.send_header('Content-Type','application/json'); self.end_headers()
@@ -754,87 +764,52 @@ class handler(http.server.SimpleHTTPRequestHandler):
                 except Exception as e:
                     err_log(f"API Stats Error: {e}")
                     self.send_error(500, str(e))
-            elif self.path.startswith('/api/guides'):
-                # Extract category filter if present
-                qs = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
-                cat_id = qs.get('category', [None])[0]
-                if cat_id:
-                    data = DataEngine.get_guides_by_category(cat_id)
-                else:
-                    data = DataEngine.get_guides()
-                self.send_response(200); self.send_header('Content-Type', 'application/json'); self.end_headers()
-                self.wfile.write(json.dumps(data, ensure_ascii=False).encode('utf-8'))
-            elif self.path.startswith('/api/reports'):
-                qs = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
-                start_str = qs.get('start', [None])[0]
-                end_str = qs.get('end', [None])[0]
-                
-                if not start_str or not end_str:
-                    self.send_error(400, "Missing dates")
-                    return
-                
-                try:
-                    start_dt = datetime.strptime(start_str, '%Y-%m-%d')
-                    end_dt = datetime.strptime(end_str, '%Y-%m-%d')
-                    report_data = DataEngine.get_tier2(start_dt, end_dt)
-                    
-                    self.send_response(200)
-                    self.send_header('Content-Type', 'application/json')
-                    self.end_headers()
-                    self.wfile.write(json.dumps(report_data, ensure_ascii=False).encode('utf-8'))
-                except Exception as e:
-                    err_log(f"Report Generation Error: {e}")
-                    self.send_error(500, str(e))
                 return
-            if self.path == '/api/health':
+
+            if path == '/api/health':
                 health = {
                     "firebase": db is not None,
                     "gdrive": (HAS_GDRIVE and GDRIVE_SERVICE is not None),
                     "parsers": HAS_PARSERS,
-                    "vercel": os.environ.get('VERCEL') is not None
+                    "vercel": os.environ.get('VERCEL') is not None,
+                    "now": get_now_utc().isoformat()
                 }
                 self.send_response(200); self.send_header('Content-Type','application/json'); self.end_headers()
                 self.wfile.write(json.dumps(health).encode())
                 return
-            
-            if any(self.path.startswith(p) for p in ['/uploads/', '/מדריכים/', '/לקוחות/', '/TIER2/', '/Digital/', '/csv/']):
-                # Generalized local file server with correct mime types
+
+            # Explicit file serving whitelist - NO DIRECTORY LISTING
+            allowed_prefixes = ['/uploads/', '/מדריכים/', '/לקוחות/', '/TIER2/', '/Digital/', '/csv/']
+            if any(path.startswith(p) for p in allowed_prefixes):
                 try:
-                    rel_path = urllib.parse.unquote(self.path[1:])
+                    rel_path = urllib.parse.unquote(path[1:])
                     fpath = os.path.join(BASE_DIR, rel_path)
-                    log(f"DEBUG: Request: {self.path}, Rel: {rel_path}, Full: {fpath}, Exist: {os.path.exists(fpath)}")
                     
                     if os.path.exists(fpath) and os.path.isfile(fpath):
                         self.send_response(200)
                         ext = os.path.splitext(fpath)[1].lower()
-                        
-                        # Mime Map
                         mimes = {
                             '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', 
                             '.gif': 'image/gif', '.pdf': 'application/pdf', 
                             '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
                             '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                            '.rar': 'application/x-rar-compressed', '.zip': 'application/zip',
                             '.csv': 'text/csv', '.txt': 'text/plain', '.json': 'application/json'
                         }
                         self.send_header('Content-type', mimes.get(ext, 'application/octet-stream'))
-                        
-                        # Add attachment header for downloads
-                        if ext in ['.zip', '.rar', '.docx', '.xlsx', '.pdf']:
-                            fname = os.path.basename(fpath)
-                            self.send_header('Content-Disposition', f'attachment; filename="{urllib.parse.quote(fname)}"')
-                        
                         self.end_headers()
                         with open(fpath, 'rb') as f: self.wfile.write(f.read())
                         return
+                    else:
+                        log(f"File Route: 404 for {fpath}")
+                        self.send_error(404, "File not found or is a directory")
+                        return
                 except Exception as e:
-                    err_log(f"File Serve Error ({self.path}): {e}")
-                
-                self.send_error(404)
-                return
-            else: 
-                super().do_GET()
-        except Exception as e: 
+                    err_log(f"File Serve Error: {e}")
+            
+            # Catch all for unhandled routes - DO NOT CALL SUPER (Security)
+            log(f"Route Trace: 404 for path '{path}'")
+            self.send_error(404, "Page Not Found")
+        except Exception as e:
             err_log(f"GET Error: {e}")
             self.send_error(500, str(e))
 
