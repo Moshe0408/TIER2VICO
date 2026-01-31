@@ -562,6 +562,36 @@ class DataEngine:
         return success
 
     @staticmethod
+    def save_guides_categories(data):
+        log(f"DataEngine: Saving {len(data)} categories...")
+        success = False
+        if db:
+            try:
+                # Firestore: Save to 'guides_categories' collection
+                # We can store each category as a document
+                batch = db.batch()
+                for cat in data:
+                    cid = cat.get('id') or str(uuid.uuid4())
+                    doc_ref = db.collection('guides_categories').document(cid)
+                    batch.set(doc_ref, cat)
+                batch.commit()
+                success = True
+                log("DataEngine: Categories saved to Firestore.")
+            except Exception as e:
+                err_log(f"Firestore Categories save error: {e}")
+
+        # Local save as backup
+        try:
+            p = os.path.join(BASE_DIR, "guides_db.json")
+            # The frontend sends a list of categories which matches guides_db.json structure
+            with open(p, 'w', encoding='utf-8') as f:
+                json.dump(data, f, indent=4, ensure_ascii=False)
+            success = True
+        except Exception as e:
+            log(f"DataEngine: Categories local save skipped (Vercel): {e}")
+        return success
+
+    @staticmethod
     def extract_text_from_file(file_path):
         if not HAS_PARSERS: 
             if os.environ.get('VERCEL'):
@@ -986,10 +1016,13 @@ class handler(http.server.SimpleHTTPRequestHandler):
                 length = int(self.headers.get('Content-Length', 0))
                 body = self.rfile.read(length).decode('utf-8')
                 data = json.loads(body)
-                if DataEngine.save_guides(data):
+                # The frontend sends the whole categories list here
+                if DataEngine.save_guides_categories(data):
                     self.send_response(200); self.send_header('Content-Type', 'application/json'); self.end_headers()
                     self.wfile.write(json.dumps({"status":"ok"}).encode('utf-8'))
-                else: self.send_error(500, "Save failed")
+                else: 
+                    err_log("POST /api/guides/save failed in DataEngine")
+                    self.send_error(500, "Save failed")
                 return
 
             if self.path == '/api/integrations/save':
@@ -2712,8 +2745,13 @@ class handler(http.server.SimpleHTTPRequestHandler):
             h.innerHTML = `<tr><th>פרויקט</th><th>סוג מכשיר</th><th>GW</th><th>מנהל</th><th>גרסה</th><th style="width:80px">מדריכים</th><th style="width:100px">פעולה</th></tr>`;
             
             const b = document.getElementById('files'); b.innerHTML = '';
-            data.forEach((r) => {
-                const globalIdx = stats_data.Integrations.indexOf(r);
+            data.forEach((r, idx) => {
+                // Determine the correct global index or local index for editing
+                let editIdx = idx;
+                if (sect === 'customers' && subSect === 'projects') {
+                    editIdx = stats_data.Integrations.indexOf(r);
+                }
+
                 const sheet = r.Sheet ? `<a href="${r.Sheet}" target="_blank" title="Release Sheet" style="text-decoration:none; font-size:24px; margin:0 5px;">📄</a>` : '';
                 const note = r.Note ? `<a href="${r.Note}" target="_blank" title="Release Note" style="text-decoration:none; font-size:24px; margin:0 5px;">📝</a>` : '';
                 const manual = r.Manual ? `<a href="${r.Manual}" target="_blank" title="Manual/Config" style="text-decoration:none; font-size:24px; margin:0 5px;">⚙️</a>` : '';
@@ -2724,7 +2762,7 @@ class handler(http.server.SimpleHTTPRequestHandler):
                     <td>${r.PM}</td>
                     <td><span style="color:${r.Version?'#fff':'#ef4444'}">${r.Version || "MISSING"}</span></td>
                     <td style="text-align:center; display:flex; justify-content:center; align-items:center; gap:5px;">${sheet} ${note} ${manual}</td>
-                    <td><button onclick="openEdit(${globalIdx})" style="background:rgba(255,255,255,0.05); border:1px solid var(--border); color:#fff; padding:5px 12px; border-radius:8px; cursor:pointer; font-size:12px">Edit</button></td>
+                    <td><button onclick="openEdit(${editIdx})" style="background:rgba(255,255,255,0.05); border:1px solid var(--border); color:#fff; padding:5px 12px; border-radius:8px; cursor:pointer; font-size:12px">Edit</button></td>
                 </tr>`;
             });
         }
@@ -2734,7 +2772,17 @@ class handler(http.server.SimpleHTTPRequestHandler):
             h.innerHTML = `<tr><th>לקוח</th><th>אחריות</th><th>משך</th><th>מענה שירות</th><th>כיסוי</th><th>SLA</th></tr>`;
             
             const b = document.getElementById('files'); b.innerHTML = '';
+            
+            // Deduplication: Only show if NOT in main projects list or if specifically requested
+            // Or more simply: filter out those where basic project info is essentially the same as warranty info
+            // User requested: "מי שבטבלה הראשונה תסיר מתוך הלקוחות עם שירות"
+            const projectCustomers = new Set(stats_data.Integrations.map(x => x.Customer));
+
             data.forEach((r) => {
+                // If it's a "standard" project with no interesting warranty info, skip to reduce clutter
+                const hasWarrantyInfo = r.WarrantyStatus && r.WarrantyStatus !== 'n/a' && r.WarrantyStatus !== 'אין';
+                if (!hasWarrantyInfo && projectCustomers.has(r.Customer)) return;
+
                 const status = (r.WarrantyStatus || 'אין').includes('יש') ? '✅ ' + r.WarrantyStatus : '❌ ' + (r.WarrantyStatus || 'n/a');
                 b.innerHTML += `<tr>
                     <td><b>${r.Customer}</b></td>
@@ -2798,14 +2846,21 @@ class handler(http.server.SimpleHTTPRequestHandler):
                 if(currentEditIdx === -1) {
                     stats_data.Integrations.push(data);
                 } else {
+                    // Update the correct element in the full list
                     Object.assign(stats_data.Integrations[currentEditIdx], data);
                 }
                 
-                await fetch('/api/integrations/save', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(stats_data.Integrations)
-                });
+                try {
+                    const resp = await fetch('/api/integrations/save', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(stats_data.Integrations)
+                    });
+                    if(!resp.ok) throw new Error("Backend save failed");
+                } catch(e) {
+                    console.error("Save error:", e);
+                    alert("שגיאת שמירה בלקוחות.");
+                }
             } else {
                 // Table-based category
                 const cat = guides_data.find(c => c.id == selectedCatId);

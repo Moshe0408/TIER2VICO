@@ -1,0 +1,199 @@
+{
+    "total_calls": 12717,
+    "vico_outgoing_count": 3337,
+    "tier1_count": 2344,
+    "verticals_count": 5460,
+    "shufersal_count": 1175,
+    "tier1_plus_vico_count": 5681,
+    "avg_duration_sec": 455.01,
+    "avg_duration_min": 7.58,
+    "monthly_trends": [
+        {
+            "Month": 1,
+            "MonthName": "January",
+            "count": 1040
+        },
+        {
+            "Month": 2,
+            "MonthName": "February",
+            "count": 1156
+        },
+        {
+            "Month": 3,
+            "MonthName": "March",
+            "count": 1099
+        },
+        {
+            "Month": 4,
+            "MonthName": "April",
+            "count": 974
+        },
+        {
+            "Month": 5,
+            "MonthName": "May",
+            "count": 999
+        },
+        {
+            "Month": 6,
+            "MonthName": "June",
+            "count": 980
+        },
+        {
+            "Month": 7,
+            "MonthName": "July",
+            "count": 1171
+        },
+        {
+            "Month": 8,
+            "MonthName": "August",
+            "count": 899
+        },
+        {
+            "Month": 9,
+            "MonthName": "September",
+            "count": 983
+        },
+        {
+            "Month": 10,
+            "MonthName": "October",
+            "count": 1059
+        },
+        {
+            "Month": 11,
+            "MonthName": "November",
+            "count": 1128
+        },
+        {
+            "Month": 12,
+            "MonthName": "December",
+            "count": 1229
+        }
+    ],
+    "employee_performance": [
+        {
+            "Employee": "Arieli, Niv",
+            "count": 4299,
+            "avg_duration": 529.1981856245638,
+            "avg_duration_min": 8.82
+        },
+        {
+            "Employee": "Braunstein, Lior",
+            "count": 3045,
+            "avg_duration": 507.74055829228246,
+            "avg_duration_min": 8.46
+        },
+        {
+            "Employee": "Isakov, Moshe",
+            "count": 432,
+            "avg_duration": 269.3125,
+            "avg_duration_min": 4.49
+        },
+        {
+            "Employee": "Vaysman, Dan",
+            "count": 4941,
+            "avg_duration": 374.1912568306011,
+            "avg_duration_min": 6.24
+        }
+    ],
+    "hourly_distribution": [
+        {
+            "Hour": 6,
+            "count": 2
+        },
+        {
+            "Hour": 7,
+            "count": 131
+        },
+        {
+            "Hour": 8,
+            "count": 875
+        },
+        {
+            "Hour": 9,
+            "count": 1357
+        },
+        {
+            "Hour": 10,
+            "count": 1596
+        },
+        {
+            "Hour": 11,
+            "count": 1687
+        },
+        {
+            "Hour": 12,
+            "count": 1824
+        },
+        {
+            "Hour": 13,
+            "count": 1400
+        },
+        {
+            "Hour": 14,
+            "count": 1288
+        },
+        {
+            "Hour": 15,
+            "count": 1152
+        },
+        {
+            "Hour": 16,
+            "count": 751
+        },
+        {
+            "Hour": 17,
+            "count": 293
+        },
+        {
+            "Hour": 18,
+            "count": 166
+        },
+        {
+            "Hour": 19,
+            "count": 119
+        },
+        {
+            "Hour": 20,
+            "count": 58
+        },
+        {
+            "Hour": 21,
+            "count": 13
+        },
+        {
+            "Hour": 22,
+            "count": 5
+        }
+    ],
+    "dow_distribution": [
+        {
+            "DayOfWeek": "Monday",
+            "count": 2465
+        },
+        {
+            "DayOfWeek": "Tuesday",
+            "count": 2385
+        },
+        {
+            "DayOfWeek": "Wednesday",
+            "count": 2314
+        },
+        {
+            "DayOfWeek": "Thursday",
+            "count": 2221
+        },
+        {
+            "DayOfWeek": "Friday",
+            "count": 805
+        },
+        {
+            "DayOfWeek": "Saturday",
+            "count": 16
+        },
+        {
+            "DayOfWeek": "Sunday",
+            "count": 2511
+        }
+    ],
+    "fcr_rate": 74.5
+}
