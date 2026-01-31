@@ -62,15 +62,23 @@ try:
     GDRIVE_FOLDER_ID = "13jBR4dJOhojtf63_mGYLeoAqiqP7KjJs"  # Dashboard-Uploads folder
     
     # Try to load credentials from environment variable first (for Vercel)
-    gdrive_creds_json = os.environ.get('GOOGLE_DRIVE_CREDENTIALS')
-    if gdrive_creds_json:
-        creds_data = json.loads(gdrive_creds_json)
-        GDRIVE_CREDS = service_account.Credentials.from_service_account_info(
-            creds_data,
-            scopes=['https://www.googleapis.com/auth/drive.file']
-        )
-        GDRIVE_SERVICE = build('drive', 'v3', credentials=GDRIVE_CREDS)
-        log("Google Drive API initialized from environment variable")
+    gdrive_creds_str = os.environ.get('GOOGLE_DRIVE_CREDENTIALS')
+    if gdrive_creds_str:
+        try:
+            # Handle potential escaped newlines or quotes from env vars
+            if isinstance(gdrive_creds_str, str):
+                gdrive_creds_str = gdrive_creds_str.replace('\\n', '\n')
+            
+            creds_data = json.loads(gdrive_creds_str)
+            GDRIVE_CREDS = service_account.Credentials.from_service_account_info(
+                creds_data,
+                scopes=['https://www.googleapis.com/auth/drive.file']
+            )
+            GDRIVE_SERVICE = build('drive', 'v3', credentials=GDRIVE_CREDS)
+            log("Google Drive API initialized successfully from Environment Variable")
+        except Exception as e_env:
+            log(f"Failed to parse GOOGLE_DRIVE_CREDENTIALS env var: {e_env}")
+            HAS_GDRIVE = False
     elif os.path.exists(GDRIVE_CREDS_FILE):
         GDRIVE_CREDS = service_account.Credentials.from_service_account_file(
             GDRIVE_CREDS_FILE,
@@ -83,7 +91,7 @@ try:
         log("Google Drive credentials not found (neither env var nor file)")
 except Exception as e:
     HAS_GDRIVE = False
-    log(f"Google Drive API Init Error: {e}")
+    log(f"Google Drive API Init Critical Error: {e}")
 
 # --- FIREBASE SETUP ---
 db = None # Firestore Client
@@ -567,28 +575,66 @@ class DataEngine:
         success = False
         if db:
             try:
-                # Firestore: Save to 'guides_categories' collection
-                # We can store each category as a document
+                # Firestore: Split Categories and Guides to separate collections
                 batch = db.batch()
+                batch_counter = 0
+                max_batch = 400  # Firestore batch limit is 500
+                
                 for cat in data:
                     cid = cat.get('id') or str(uuid.uuid4())
+                    cat['id'] = cid # Ensure ID is set
+                    
+                    # 1. Prepare Category Doc (Excluding large children)
+                    cat_doc = {k:v for k,v in cat.items() if k not in ['guides', 'subCategories']}
+                    # Convert subCategories to lightweight list if needed, or save separately.
+                    # For now, we'll keep subCategories in the doc IF they are small, but ideally separate.
+                    # Let's keep subCategories in the doc for simplicity as they are usually structure.
+                    cat_doc['subCategories'] = cat.get('subCategories', [])
+                    
                     doc_ref = db.collection('guides_categories').document(cid)
-                    batch.set(doc_ref, cat)
-                batch.commit()
+                    batch.set(doc_ref, cat_doc)
+                    batch_counter += 1
+                    
+                    # 2. Save Guides to 'guides' collection
+                    guides = cat.get('guides', [])
+                    for g in guides:
+                        gid = g.get('id') or str(uuid.uuid4())
+                        g['id'] = gid
+                        g['Category'] = cid # Link to parent
+                        # Remove potentially heavy nested images from index if needed, but we keep for now
+                        
+                        g_ref = db.collection('guides').document(gid)
+                        batch.set(g_ref, g)
+                        batch_counter += 1
+                        
+                        if batch_counter >= max_batch:
+                            batch.commit()
+                            batch = db.batch()
+                            batch_counter = 0
+
+                if batch_counter > 0:
+                    batch.commit()
+                
                 success = True
-                log("DataEngine: Categories saved to Firestore.")
+                log("DataEngine: Categories & Guides saved to Firestore (Split Model).")
             except Exception as e:
                 err_log(f"Firestore Categories save error: {e}")
 
-        # Local save as backup
+        # Local save as backup (handling Vercel Read-Only FS)
         try:
-            p = os.path.join(BASE_DIR, "guides_db.json")
-            # The frontend sends a list of categories which matches guides_db.json structure
-            with open(p, 'w', encoding='utf-8') as f:
-                json.dump(data, f, indent=4, ensure_ascii=False)
-            success = True
+            if not IS_VERCEL:
+                p = os.path.join(BASE_DIR, "guides_db.json")
+                with open(p, 'w', encoding='utf-8') as f:
+                    json.dump(data, f, indent=4, ensure_ascii=False)
+                success = True # Marked success if local work
+            else:
+                log("DataEngine: Skipping local file save (Vercel environment).")
+                # On Vercel, if Firestore worked, we are good.
+        except OSError as e:
+            log(f"DataEngine: Local save failed (Expected on Vercel): {e}")
         except Exception as e:
-            log(f"DataEngine: Categories local save skipped (Vercel): {e}")
+            log(f"DataEngine: Local save error: {e}")
+            
         return success
 
     @staticmethod
@@ -1647,9 +1693,10 @@ class handler(http.server.SimpleHTTPRequestHandler):
             <!-- Dynamic Categories Rendered Here -->
         </div>
         <div style="display:flex; gap:15px; align-items:center;">
+            <button onclick="openAddGuide()" title="יצירת מדריך חדש" style="background:#8b5cf6; color:#fff; border:none; padding:8px 15px; border-radius:12px; font-size:13px; cursor:pointer; display:flex; align-items:center; gap:8px;">📝 מדריך חדש</button>
             <button onclick="syncGDrive()" title="סנכרון תקיות מגוגל דרייב" style="background:rgba(59,130,246,0.2); color:#60a5fa; border:1px solid rgba(59,130,246,0.3); padding:8px 15px; border-radius:12px; font-size:13px; cursor:pointer; display:flex; align-items:center; gap:8px;">🔄 סנכרון דרייב</button>
             <button onclick="openAddCat()" title="הוספת קטגוריה" style="background:var(--primary); color:#fff; border:none; padding:8px 15px; border-radius:12px; font-size:13px; cursor:pointer; transition:0.3s; display:flex; align-items:center; gap:8px;">📁 קטגוריה חדשה</button>
-            <button onclick="takeShot()" style="background:#10b981; color:#fff; border:none; padding:10px 20px; border-radius:12px; font-weight:900; cursor:pointer; box-shadow:0 0 20px rgba(16,185,129,0.3)">📸 צילום מסך</button>
+            <button onclick="takeShot()" style="background:#10b981; color:#fff; border:none; padding:10px 20px; border-radius:12px; font-weight:900; cursor:pointer; box-shadow:0 0 20px rgba(16,185,129,0.3)">📸</button>
         </div>
     </div>
 
@@ -2138,18 +2185,41 @@ class handler(http.server.SimpleHTTPRequestHandler):
         }
 
         
-        // Load guides from Firestore
+        // Load guides from Firestore (Merged Logic)
         async function loadGuidesFromFirestore() {
             try {
                 const { collection, getDocs } = window.firebaseRefs;
-                const guidesCol = collection(window.db, 'guides');
-                const snapshot = await getDocs(guidesCol);
                 
-                if (!snapshot.empty) {
-                    guides_data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                    console.log('Loaded guides from Firestore:', guides_data.length);
+                // 1. Fetch Categories
+                const catCol = collection(window.db, 'guides_categories');
+                const catSnap = await getDocs(catCol);
+                let cats = [];
+                if (!catSnap.empty) {
+                    cats = catSnap.docs.map(doc => ({ id: doc.id, guides: [], ...doc.data() }));
+                }
+
+                // 2. Fetch Guides
+                const guidesCol = collection(window.db, 'guides');
+                const guideSnap = await getDocs(guidesCol);
+                let guides = [];
+                if (!guideSnap.empty) {
+                    guides = guideSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                }
+
+                // 3. Merge Guides into Categories
+                cats.forEach(c => {
+                    // Filter guides belonging to this category
+                    c.guides = guides.filter(g => g.Category === c.id);
+                });
+                
+                // If cats is empty but guides exist (orphaned?), potentially handle them.
+                // For now, we trust the cats list.
+                
+                if (cats.length > 0) {
+                    guides_data = cats;
+                    console.log(`Loaded ${cats.length} categories and ${guides.length} guides from Firestore.`);
                 } else {
-                    console.log('No guides in Firestore, using empty array');
+                    console.log('No categories field found, trying legacy or empty.');
                     guides_data = [];
                 }
             } catch(e) {
@@ -2583,17 +2653,32 @@ class handler(http.server.SimpleHTTPRequestHandler):
 
         function openAddGuide() {
             editingGuideId = null;
+            
+            // Check if we have any categories
+            if (!guides_data || guides_data.length === 0) {
+                alert("אנא צור קטגוריה חדשה או סנכרן מהדרייב לפני יצירת מדריך.");
+                return;
+            }
+
             document.getElementById('guide-modal').querySelector('b').innerText = 'יצירת מדריך חדש למערכת';
             document.getElementById('guide-title').value = '';
             document.getElementById('guide-content').innerHTML = '';
             currentGuideImages = [];
             renderGuideImages();
             
+            // Populate Category Select
             const sel = document.getElementById('guide-cat');
             sel.innerHTML = guides_data.map(c => `<option value="${c.id}" ${c.id==selectedCatId?'selected':''}>${c.name}</option>`).join('');
             
-            updateSubCatDropdown(); // Update subcats for the initial selection
-            
+            // If no category selected, pick the first one and update subcats
+            if (!selectedCatId && guides_data.length > 0) {
+                 // Trigger change update manually implies just visually setting it
+                 // But we want subcats to load
+                 updateSubCatDropdown(null);
+            } else {
+                 updateSubCatDropdown(); 
+            }
+
             document.querySelector('.overlay').style.display = 'block';
             document.getElementById('guide-modal').style.display = 'flex';
             
