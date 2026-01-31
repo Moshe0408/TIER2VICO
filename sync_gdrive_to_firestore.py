@@ -54,6 +54,16 @@ def sync():
     drive = init_gdrive()
     db = init_firestore()
     
+    # 1. Load existing categories from Firestore to avoid duplicates
+    existing_cats = {}
+    try:
+        docs = db.collection('guides_categories').stream()
+        for doc in docs:
+            d = doc.to_dict()
+            existing_cats[d['name']] = d['id']
+    except Exception as e:
+        print(f"Error loading existing categories: {e}")
+
     root_files = list_files_in_folder(drive, GDRIVE_FOLDER_ID)
     print(f"Found {len(root_files)} main items in Root.")
 
@@ -62,72 +72,74 @@ def sync():
         fid = root_f['id']
         mime = root_f['mimeType']
         
-        print(f"\n[Root Item] {name} ({fid})")
+        print(f"\n[GDrive Item] {name} ({fid})")
         
         if mime == 'application/vnd.google-apps.folder':
-            # Map top-level Hebrew folders to App Categories
-            app_cat = "kb-guides"
-            if "לקוחות" in name: app_cat = "integrations"
-            elif "דרייבר" in name or "דרייבירם" in name: app_cat = "kb-drivers"
-            
-            print(f"   Category Mapping: {app_cat}")
+            # This is a Category folder
+            cat_id = existing_cats.get(name)
+            if not cat_id:
+                # Create new category
+                cat_id = str(uuid.uuid4())
+                print(f"   Creating NEW Category: {name} ({cat_id})")
+                db.collection('guides_categories').document(cat_id).set({
+                    "id": cat_id,
+                    "name": name,
+                    "emoji": "📂",
+                    "type": "kb",
+                    "guides": [],
+                    "subCategories": []
+                })
             
             sub_files = list_files_in_folder(drive, fid)
-            print(f"   Found {len(sub_files)} items in {name}")
+            print(f"   Syncing {len(sub_files)} files into category '{name}'")
             
             for f in sub_files:
                 if f['mimeType'] == 'application/vnd.google-apps.folder':
-                    print(f"      Scanning Subfolder: {f['name']}")
+                    # Treat subfolders as Sub-Categories
                     sub_sub_files = list_files_in_folder(drive, f['id'])
+                    print(f"      Sub-Category: {f['name']} ({len(sub_sub_files)} items)")
                     for ssf in sub_sub_files:
-                        save_to_firestore(db, ssf, app_cat, sub_category=f['name'])
+                        save_to_firestore(db, ssf, cat_id, sub_category=f['name'])
                 else:
-                    save_to_firestore(db, f, app_cat)
+                    save_to_firestore(db, f, cat_id)
         else:
-            save_to_firestore(db, root_f, "others")
+            # Root file (not in folder) - Put in a "General" category
+            gen_cat_name = "כללי"
+            cat_id = existing_cats.get(gen_cat_name)
+            if not cat_id:
+                cat_id = "general"
+                db.collection('guides_categories').document(cat_id).set({
+                    "id": cat_id, "name": gen_cat_name, "emoji": "📁", "type": "kb", "guides": [], "subCategories": []
+                })
+            save_to_firestore(db, root_f, cat_id)
 
     print("\nSync Complete!")
 
-def save_to_firestore(db, file_data, category, sub_category=None):
+def save_to_firestore(db, file_data, cat_id, sub_category=None):
     if file_data['mimeType'] == 'application/vnd.google-apps.folder': return
 
     name = file_data['name']
-    url = f"https://drive.google.com/uc?export=download&id={file_data['id']}"
+    # Use direct download link or webViewLink
+    url = file_data.get('webViewLink')
+    # If we want direct download for images/PDFs:
+    # url = f"https://drive.google.com/uc?export=download&id={file_data['id']}"
     
-    # Clean category/sub_category for Firestore IDs if needed
+    # We add the guide to the 'guides' collection, linked by Category ID
+    gid = str(uuid.uuid5(uuid.NAMESPACE_DNS, name + (sub_category or "") + cat_id))
     
-    # For Guides (kb-guides, kb-drivers)
-    if category.startswith("kb"):
-        # Use filename as ID to prevent duplicates on re-run
-        gid = str(uuid.uuid5(uuid.NAMESPACE_DNS, name + (sub_category or "")))
-        doc_ref = db.collection('guides').document(gid)
-        doc_ref.set({
-            "id": gid,
-            "title": name,
-            "content": f"Download Link: {url}",
-            "Category": sub_category or category,
-            "url": url,
-            "gdrive_id": file_data['id'],
-            "type": "file",
-            "last_sync": firestore.SERVER_TIMESTAMP
-        }, merge=True)
-    
-    # For Integrations (Customer documents)
-    elif category == "integrations" and sub_category:
-        docs = db.collection('data').document('integrations').get()
-        if docs.exists:
-            ints = docs.to_dict().get('list', [])
-            updated = False
-            for i in ints:
-                # Fuzzy match customer name
-                if i['Customer'].lower() in sub_category.lower() or sub_category.lower() in i['Customer'].lower():
-                    if "Sheet" in name: i['SheetURL'] = url
-                    elif "Note" in name: i['NoteURL'] = url
-                    else: i['ManualURL'] = url
-                    updated = True
-                    print(f"         Matched Project: {i['Customer']}")
-            if updated:
-                db.collection('data').document('integrations').set({"list": ints}, merge=True)
+    print(f"      Saving: {name}")
+    doc_ref = db.collection('guides').document(gid)
+    doc_ref.set({
+        "id": gid,
+        "title": name,
+        "content": f"קובץ מגוגל דרייב: {name}\n\nקישור לצפייה: {url}",
+        "Category": cat_id,
+        "SubCategory": sub_category,
+        "url": url,
+        "gdrive_id": file_data['id'],
+        "type": "file",
+        "last_sync": firestore.SERVER_TIMESTAMP
+    }, merge=True)
 
 if __name__ == "__main__":
     sync()

@@ -592,6 +592,70 @@ class DataEngine:
         return success
 
     @staticmethod
+    def sync_gdrive_to_kb():
+        log("DataEngine: Manual GDrive sync triggered...")
+        if not HAS_GDRIVE or not GDRIVE_SERVICE:
+            log("Sync failed: GDrive not initialized")
+            return False, "Google Drive API not initialized"
+        
+        try:
+            # 1. Load existing categories
+            existing_cats = {}
+            if db:
+                docs = db.collection('guides_categories').stream()
+                for doc in docs:
+                    d = doc.to_dict()
+                    existing_cats[d['name']] = d['id']
+            
+            # 2. Get GDrive files
+            files = []
+            query = f"'{GDRIVE_FOLDER_ID}' in parents and trashed = false"
+            results = GDRIVE_SERVICE.files().list(q=query, fields="files(id, name, mimeType, webViewLink)").execute()
+            root_items = results.get('files', [])
+            
+            for item in root_items:
+                name = item['name']
+                fid = item['id']
+                mime = item['mimeType']
+                
+                if mime == 'application/vnd.google-apps.folder':
+                    cat_id = existing_cats.get(name)
+                    if not cat_id:
+                        cat_id = str(uuid.uuid4())
+                        if db:
+                            db.collection('guides_categories').document(cat_id).set({
+                                "id": cat_id, "name": name, "emoji": "📂", "type": "kb", "guides": [], "subCategories": []
+                            })
+                    
+                    # Sync files in this folder
+                    sub_q = f"'{fid}' in parents and trashed = false"
+                    sub_res = GDRIVE_SERVICE.files().list(q=sub_q, fields="files(id, name, mimeType, webViewLink)").execute()
+                    for f in sub_res.get('files', []):
+                        if f['mimeType'] != 'application/vnd.google-apps.folder':
+                            # Save as guide
+                            gid = str(uuid.uuid5(uuid.NAMESPACE_DNS, f['name'] + cat_id))
+                            if db:
+                                db.collection('guides').document(gid).set({
+                                    "id": gid, "title": f['name'], "Category": cat_id, "type": "file",
+                                    "content": f"קובץ מגוגל דרייב: {f['name']}\n\nקישור לצפייה: {f['webViewLink']}",
+                                    "url": f['webViewLink'], "gdrive_id": f['id']
+                                }, merge=True)
+                else:
+                    # Root file -> General
+                    cat_id = existing_cats.get("כללי") or "general"
+                    gid = str(uuid.uuid5(uuid.NAMESPACE_DNS, item['name'] + cat_id))
+                    if db:
+                        db.collection('guides').document(gid).set({
+                            "id": gid, "title": item['name'], "Category": cat_id, "type": "file",
+                            "content": f"קובץ מגוגל דרייב: {item['name']}\n\nקישור לצפייה: {item['webViewLink']}",
+                            "url": item['webViewLink'], "gdrive_id": item['id']
+                        }, merge=True)
+            return True, "Sync complete"
+        except Exception as e:
+            err_log(f"GDrive manual sync failed: {e}")
+            return False, str(e)
+
+    @staticmethod
     def extract_text_from_file(file_path):
         if not HAS_PARSERS: 
             if os.environ.get('VERCEL'):
@@ -1033,6 +1097,16 @@ class handler(http.server.SimpleHTTPRequestHandler):
                     self.send_response(200); self.send_header('Content-Type', 'application/json'); self.end_headers()
                     self.wfile.write(json.dumps({"status":"ok"}).encode('utf-8'))
                 else: self.send_error(500, "Save failed")
+                return
+
+            if self.path == '/api/gdrive/sync':
+                success, msg = DataEngine.sync_gdrive_to_kb()
+                if success:
+                    self.send_response(200); self.send_header('Content-Type', 'application/json'); self.end_headers()
+                    self.wfile.write(json.dumps({"status":"ok"}).encode('utf-8'))
+                else:
+                    self.send_response(500); self.send_header('Content-Type', 'application/json'); self.end_headers()
+                    self.wfile.write(json.dumps({"status":"error", "message": msg}).encode('utf-8'))
                 return
 
             if self.path == '/api/extract-content':
@@ -1573,7 +1647,8 @@ class handler(http.server.SimpleHTTPRequestHandler):
             <!-- Dynamic Categories Rendered Here -->
         </div>
         <div style="display:flex; gap:15px; align-items:center;">
-            <button onclick="openAddCat()" title="הוספת קטגוריה" style="background:rgba(255,255,255,0.1); color:#fff; border:none; width:40px; height:40px; border-radius:50%; font-size:20px; cursor:pointer; transition:0.3s; display:flex; align-items:center; justify-content:center;">+</button>
+            <button onclick="syncGDrive()" title="סנכרון תקיות מגוגל דרייב" style="background:rgba(59,130,246,0.2); color:#60a5fa; border:1px solid rgba(59,130,246,0.3); padding:8px 15px; border-radius:12px; font-size:13px; cursor:pointer; display:flex; align-items:center; gap:8px;">🔄 סנכרון דרייב</button>
+            <button onclick="openAddCat()" title="הוספת קטגוריה" style="background:var(--primary); color:#fff; border:none; padding:8px 15px; border-radius:12px; font-size:13px; cursor:pointer; transition:0.3s; display:flex; align-items:center; gap:8px;">📁 קטגוריה חדשה</button>
             <button onclick="takeShot()" style="background:#10b981; color:#fff; border:none; padding:10px 20px; border-radius:12px; font-weight:900; cursor:pointer; box-shadow:0 0 20px rgba(16,185,129,0.3)">📸 צילום מסך</button>
         </div>
     </div>
@@ -1958,13 +2033,24 @@ class handler(http.server.SimpleHTTPRequestHandler):
                 } else {
                     document.getElementById('guides-section').style.display = 'flex';
                     const cat = guides_data.find(c => c.id == selectedCatId);
-                    if(!cat) return;
+                    
+                    // Always show the "Add Guide" button area if we are in Guides section
+                    document.getElementById('g-sidebar').style.display = 'flex';
+                    
+                    if(!cat) {
+                        // Default view for Guides when no category is selected
+                        document.getElementById('t').innerText = 'מרכז ידע ותיעוד';
+                        document.getElementById('s').innerText = 'בחר קטגוריה מהתפריט העליון';
+                        document.getElementById('g-nav-tree').innerHTML = '<div style="padding:20px; color:var(--dim); text-align:center">אנא בחר קטגוריה לעריכה או צפייה</div>';
+                        return;
+                    }
+
                     document.querySelector('.kpi-row').style.display = 'none';
                     document.querySelector('.sub-nav').style.display = 'none';
                     if(selectedGuideId) renderGuideView(selectedCatId, selectedGuideId);
                     else {
                         document.getElementById('t').innerText = cat.name;
-                        document.getElementById('s').innerText = 'מרכז תיעוד וממדריכים';
+                        document.getElementById('s').innerText = 'מרכז תיעוד ומדריכים';
                         renderGuideContent(cat);
                     }
                 }
@@ -2076,6 +2162,30 @@ class handler(http.server.SimpleHTTPRequestHandler):
                 } catch(apiError) {
                     console.error("API fallback failed:", apiError);
                 }
+            }
+        }
+
+        async function syncGDrive() {
+            const btn = event.target;
+            const oldHtml = btn.innerHTML;
+            btn.innerHTML = '<span class="spin">⏳</span> מסנכרן...';
+            btn.disabled = true;
+            
+            try {
+                const resp = await fetch('/api/gdrive/sync', { method: 'POST' });
+                const data = await resp.json();
+                if(data.status === 'ok') {
+                    alert("סנכרון מגוגל דרייב הושלם בהצלחה! הקטגוריות והקבצים עודכנו.");
+                    await refresh();
+                } else {
+                    throw new Error(data.message || "Sync failed");
+                }
+            } catch(e) {
+                console.error("GDrive Sync error:", e);
+                alert("שגיאת סנכרון: " + e.message);
+            } finally {
+                btn.innerHTML = oldHtml;
+                btn.disabled = false;
             }
         }
 
