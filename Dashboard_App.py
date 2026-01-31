@@ -118,12 +118,15 @@ else:
 SESSIONS = {} 
 # Hardcoded fallback user if Firebase is not linked yet
 AUTHORIZED_USERS = {
-    "moshe@verifone.com": "Verifone2026!" # Default password as example
+    "moshe@verifone.com": "Verifone2026!",
+    "moshei1@verifone.com": "123456"
 }
 
 PORT = 8000
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
+# On Vercel, the filesystem is read-only. Use /tmp for uploads.
+IS_VERCEL = os.environ.get('VERCEL') == '1'
+UPLOAD_DIR = "/tmp/uploads" if IS_VERCEL else os.path.join(BASE_DIR, "uploads")
 try:
     if not os.path.exists(UPLOAD_DIR): 
         os.makedirs(UPLOAD_DIR)
@@ -485,22 +488,27 @@ class DataEngine:
                     return [g for g in all_g if g.get('Category') == cat_id]
             except: pass
         return []
+    @staticmethod
     def save_integrations(data):
+        log(f"DataEngine: Saving {len(data)} integrations...")
         success = False
         if db:
             try:
                 db.collection('data').document('integrations').set({'list': data})
                 success = True
+                log("DataEngine: Integrations saved to Firestore.")
             except Exception as e:
                 err_log(f"Firestore Integrations save error: {e}")
 
-        # Local save as backup
+        # Local save as backup (may fail on Vercel, but that's okay)
         try:
             p = os.path.join(BASE_DIR, "integrations_db.json")
             with open(p, 'w', encoding='utf-8') as f:
                 json.dump(data, f, indent=4, ensure_ascii=False)
             success = True
-        except: pass
+            log("DataEngine: Integrations saved to local JSON.")
+        except Exception as e:
+            log(f"DataEngine: Local JSON save skipped/failed (expected on Vercel): {e}")
         return success
 
     # --- GUIDES LOGIC ---
@@ -526,44 +534,19 @@ class DataEngine:
 
     @staticmethod
     def save_guides(data):
-        success = False
-        firebase_success = False
-        # Save to Firebase
-        if HAS_FIREBASE and firebase_admin._apps:
-            try:
-                from firebase_admin import db
-                ref = db.reference('guides')
-                ref.set(data)
-                firebase_success = True
-                success = True
-            except Exception as e:
-                err_log(f"Firebase Guides save error: {e}")
-
-        # Save to local
-        p = os.path.join(BASE_DIR, "guides_db.json")
-        try:
-            with open(p, 'w', encoding='utf-8') as f:
-                json.dump(data, f, ensure_ascii=False, indent=4)
-            success = True
-        except Exception as e:
-            err_log(f"Guides local save error (expected on Vercel): {e}")
-    @staticmethod
-    def save_guides(data):
+        log(f"DataEngine: Saving {len(data)} guides...")
         success = False
         if db:
             try:
-                # Save as individual documents for better Firestore performance
-                # or as one big document for simplicity. Let's do individual for scalability.
+                # Use batch for efficiency
                 batch = db.batch()
-                # First delete existing (optional, but cleaner)
-                # For simplicity in this dashboard, let's just write them all.
                 for guide in data:
-                    # Ensure each guide has an ID
                     gid = guide.get('id') or str(uuid.uuid4())
                     doc_ref = db.collection('guides').document(gid)
                     batch.set(doc_ref, guide)
                 batch.commit()
                 success = True
+                log("DataEngine: Guides saved to Firestore (batch).")
             except Exception as e:
                 err_log(f"Firestore Guides save error: {e}")
 
@@ -573,7 +556,9 @@ class DataEngine:
             with open(p, 'w', encoding='utf-8') as f:
                 json.dump(data, f, indent=4, ensure_ascii=False)
             success = True
-        except: pass
+            log("DataEngine: Guides saved to local JSON.")
+        except Exception as e:
+            log(f"DataEngine: Guides local save skipped/failed (expected on Vercel): {e}")
         return success
 
     @staticmethod
