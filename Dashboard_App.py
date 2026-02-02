@@ -2952,10 +2952,10 @@ class handler(http.server.SimpleHTTPRequestHandler):
 
                 const status = (r.WarrantyStatus || 'אין').includes('יש') ? '✅ ' + r.WarrantyStatus : '❌ ' + (r.WarrantyStatus || 'n/a');
                 b.innerHTML += `<tr>
-                    <td><b>${r.Customer}</b></td>
-                    <td style="font-size:13px">${status}</td>
-                    <td style="font-size:12px">${r.WarrantyDuration || '-'}</td>
-                    <td style="font-size:12px; max-width:200px">${r.WarrantyCoverage || '-'}</td>
+                    <td style="font-size:18px"><b>${r.Customer}</b></td>
+                    <td style="font-size:16px">${status}</td>
+                    <td style="font-size:16px">${r.WarrantyDuration || '-'}</td>
+                    <td style="font-size:15px; max-width:400px; line-height:1.5">${r.WarrantyCoverage || '-'}</td>
                 </tr>`;
             });
         }
