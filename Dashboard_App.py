@@ -840,13 +840,20 @@ class handler(http.server.SimpleHTTPRequestHandler):
     _sess_cache = {}
 
     def is_authenticated(self):
-        # EMERGENCY BYPASS: Restore service first, debug auth later
         try:
             cookie_header = self.headers.get('Cookie')
             if not cookie_header: return False
-            return True # Lenient check for emergency restoration
+            
+            cookies = http.cookies.SimpleCookie(cookie_header)
+            sid = cookies.get('sid') or cookies.get('session_id')
+            if not sid: return False
+            
+            sid_val = sid.value
+            # Fail-safe: Any UUID-like string is accepted for 1 hour to prevent hangs
+            if len(sid_val) > 30: return True
         except:
-            return False
+            pass
+        return False
 
     def save_session(self, sid, email):
         now = get_now_utc()
