@@ -1991,6 +1991,64 @@ class handler(http.server.SimpleHTTPRequestHandler):
 
             await refresh();
             setInterval(refresh, 60000);
+            
+            // Setup Drag & Drop for guides
+            setupGuidesDropZone();
+        }
+        
+        function setupGuidesDropZone() {
+            const guideSection = document.getElementById('guides-section');
+            if(!guideSection) return;
+            
+            guideSection.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                guideSection.style.background = 'rgba(var(--accent-rgb, 96, 165, 250), 0.1)';
+                guideSection.style.border = '2px dashed var(--accent)';
+            });
+            
+            guideSection.addEventListener('dragleave', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                guideSection.style.background = '';
+                guideSection.style.border = '';
+            });
+            
+            guideSection.addEventListener('drop', async (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                guideSection.style.background = '';
+                guideSection.style.border = '';
+                
+                const files = Array.from(e.dataTransfer.files);
+                if(files.length === 0) return;
+                
+                // Get category from current context
+                const catId = selectedCatId;
+                if(!catId) {
+                    alert('יש לבחור קטגוריה תחילה מהתפריט הצדדי');
+                    return;
+                }
+                
+                // Show progress
+                const progressDiv = document.createElement('div');
+                progressDiv.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,0.9);padding:30px;border-radius:12px;z-index:9999;color:white;text-align:center;';
+                progressDiv.innerHTML = `<div style="font-size:24px;margin-bottom:10px;">מעלה ${files.length} קבצים...</div><div id="progress-text">0%</div>`;
+                document.body.appendChild(progressDiv);
+                
+                let completed = 0;
+                for(let file of files) {
+                    await processFileToGuide(file, catId);
+                    completed++;
+                    document.getElementById('progress-text').innerText = Math.round((completed/files.length)*100) + '%';
+                }
+                
+                await syncGuides();
+                update();
+                
+                document.body.removeChild(progressDiv);
+                alert(`${files.length} מדריכים נוספו בהצלחה!`);
+            });
         }
 
         function parseHash(shouldUpdate = true) {
@@ -2757,6 +2815,49 @@ class handler(http.server.SimpleHTTPRequestHandler):
             }
         }
 
+        async function processFileToGuide(file, catId) {
+            try {
+                // Upload file
+                const formData = new FormData();
+                formData.append('file', file);
+                const uploadResp = await fetch('/api/upload', { method: 'POST', body: formData });
+                const uploadData = await uploadResp.json();
+                
+                // Extract content
+                const extractResp = await fetch('/api/extract-content', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url: uploadData.url })
+                });
+                const extractData = await extractResp.json();
+                
+                if(!extractData.content) return;
+                
+                // Extract images from content
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = extractData.content;
+                const imgs = tempDiv.querySelectorAll('img');
+                const images = Array.from(imgs).map(img => img.getAttribute('src')).filter(Boolean);
+                
+                // Create guide
+                const cat = guides_data.find(c => c.id == catId);
+                if(!cat) return;
+                
+                const guideObj = {
+                    id: Date.now().toString() + Math.random().toString().substring(2, 8),
+                    title: file.name.replace(/\.(docx?|pdf)$/i, ''),
+                    content: extractData.content,
+                    images: images
+                };
+                
+                if(!cat.guides) cat.guides = [];
+                cat.guides.push(guideObj);
+                
+            } catch(e) {
+                console.error('Error processing file:', file.name, e);
+            }
+        }
+
         function closeM() {
             document.querySelectorAll('.modal, .overlay').forEach(el => el.style.display = 'none');
         }
@@ -2809,6 +2910,23 @@ class handler(http.server.SimpleHTTPRequestHandler):
             if(!cat.subCategories) cat.subCategories = [];
             cat.subCategories.push({ id: Date.now().toString(), name: name, guides: [] });
             syncGuides().then(update);
+        }
+
+        async function deleteGuide(catId, guideId) {
+            if(!confirm('האם למחוק מדריך זה?')) return;
+            
+            guides_data.forEach(c => {
+                if(c.guides) c.guides = c.guides.filter(g => g.id != guideId);
+                if(c.subCategories) {
+                    c.subCategories.forEach(s => {
+                        if(s.guides) s.guides = s.guides.filter(g => g.id != guideId);
+                    });
+                }
+            });
+            
+            await syncGuides();
+            update();
+            alert('המדריך נמחק בהצלחה');
         }
 
         function openEditGuide(catId, guideId) {
