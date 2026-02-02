@@ -1442,6 +1442,10 @@ class handler(http.server.SimpleHTTPRequestHandler):
 
 
     def get_ui(self):
+        # Bootstrap data for instant load
+        boot_data = get_stats()
+        boot_json = json.dumps(boot_data, default=str).replace("</", "<\\/") 
+
         return r"""
 <!DOCTYPE html>
 <html lang="he" dir="rtl">
@@ -2009,8 +2013,24 @@ class handler(http.server.SimpleHTTPRequestHandler):
 
     <script>
         let subSect = 'projects', selectedSubCatId = null;
-        let stats_data = { Integrations: [] };
-        let guides_data = [];
+        
+        // --- BOOTSTRAP & CACHE LOGIC ---
+        let stats_data = {{boot_json}} || { Integrations: [] };
+        let guides_data = stats_data.GuidesCategories || [];
+        
+        // Try to recover from localStorage for an even faster "instant" feel
+        const cached_stats = localStorage.getItem('vico_stats');
+        if(cached_stats) {
+            try {
+                const d = JSON.parse(cached_stats);
+                if(!stats_data.Integrations || stats_data.Integrations.length === 0) {
+                    stats_data = d;
+                    guides_data = d.GuidesCategories || [];
+                    console.log("Loaded from localStorage cache");
+                }
+            } catch(e) { console.error("Cache parse error", e); }
+        }
+
         let editingCatId = null;
         let editingGuideId = null;
         
@@ -2060,7 +2080,15 @@ class handler(http.server.SimpleHTTPRequestHandler):
             window.addEventListener('hashchange', parseHash);
             parseHash(false);
 
-            await refresh();
+            // Instant Render if we have data
+            if(stats_data && stats_data.Integrations && stats_data.Integrations.length > 0) {
+                update();
+                const overlay = document.getElementById('loading-overlay');
+                if(overlay) { overlay.style.opacity = '0'; setTimeout(() => overlay.style.display = 'none', 500); }
+            }
+
+            // Sync with server in background
+            refresh();
             setInterval(refresh, 60000);
             
             // Setup Drag & Drop for guides
@@ -2322,56 +2350,8 @@ class handler(http.server.SimpleHTTPRequestHandler):
             tree.innerHTML = html;
         }
 
-        
-        // Load guides from Firestore (Merged Logic)
-        async function loadGuidesFromFirestore() {
-            try {
-                const { collection, getDocs } = window.firebaseRefs;
-                
-                // 1. Fetch Categories
-                const catCol = collection(window.db, 'guides_categories');
-                const catSnap = await getDocs(catCol);
-                let cats = [];
-                if (!catSnap.empty) {
-                    cats = catSnap.docs.map(doc => ({ id: doc.id, guides: [], ...doc.data() }));
-                }
 
-                // 2. Fetch Guides
-                const guidesCol = collection(window.db, 'guides');
-                const guideSnap = await getDocs(guidesCol);
-                let guides = [];
-                if (!guideSnap.empty) {
-                    guides = guideSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                }
-
-                // 3. Merge Guides into Categories
-                cats.forEach(c => {
-                    // Filter guides belonging to this category
-                    c.guides = guides.filter(g => g.Category === c.id);
-                });
-                
-                // If cats is empty but guides exist (orphaned?), potentially handle them.
-                // For now, we trust the cats list.
-                
-                if (cats.length > 0) {
-                    guides_data = cats;
-                    console.log(`Loaded ${cats.length} categories and ${guides.length} guides from Firestore.`);
-                } else {
-                    console.log('No categories field found, trying legacy or empty.');
-                    guides_data = [];
-                }
-            } catch(e) {
-                console.error("Firestore load error:", e);
-                // Fallback to API if Firestore fails
-                try {
-                    const res = await fetch('/api/stats');
-                    const data = await res.json();
-                    if(data.Guides) guides_data = data.Guides;
-                } catch(apiError) {
-                    console.error("API fallback failed:", apiError);
-                }
-            }
-        }
+        // Note: loadGuidesFromFirestore removed in favor of /api/stats consolidation
 
         async function syncGDrive() {
              console.log("GDrive sync removed.");
@@ -2410,6 +2390,9 @@ class handler(http.server.SimpleHTTPRequestHandler):
                 if (data.GuidesCategories) {
                     guides_data = data.GuidesCategories;
                 }
+                
+                // Save to cache for next visit
+                localStorage.setItem('vico_stats', JSON.stringify(data));
                 
                 update();
                 
@@ -3576,7 +3559,7 @@ class handler(http.server.SimpleHTTPRequestHandler):
     </script>
 </body>
 </html>
-        """
+        """.replace("{{boot_json}}", boot_json)
 
 if __name__ == "__main__":
     socketserver.TCPServer.allow_reuse_address = True
