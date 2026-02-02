@@ -1702,7 +1702,11 @@ class handler(http.server.SimpleHTTPRequestHandler):
                 <label style="color:var(--dim); font-size:12px; display:block; margin-bottom:5px;">סוג מכשיר</label>
                 <select id="cat-type" style="width:100%; background:rgba(255,255,255,0.05); border:1px solid var(--border); padding:12px; border-radius:10px; color:#fff; font-family:inherit;">
                     <option value="kb">📚 מרכז ידע (מדריכים)</option>
-                    <option value="table">🤝 טבלת פרויקטים (שורות/עמודות)</option>
+                    <option value="table">🤝 טבלת פרויקטים (Vico)</option>
+                    <option value="table_general">📋 טבלה כללית (שם, תיאור, סטטוס, הערות)</option>
+                    <option value="table_phones">📞 רשימת טלפונים (שם, טלפון, תפקיד, מייל)</option>
+                    <option value="table_ip">🌐 רשימת כתובות IP (שרת, IP, מיקום, פורט)</option>
+                    <option value="table_pass">🔑 ניהול סיסמאות (שם, משתמש, סיסמה, הערות)</option>
                 </select>
             </div>
 
@@ -1772,23 +1776,23 @@ class handler(http.server.SimpleHTTPRequestHandler):
         <div class="modal-body">
             <div style="display:grid; grid-template-columns: 1fr 1fr; gap:15px;">
                 <div class="input-group">
-                    <label style="color:var(--dim); font-size:12px">CUSTOMER</label>
+                    <label id="lbl-cust" style="color:var(--dim); font-size:12px">CUSTOMER</label>
                     <input type="text" id="edit-cust" style="width:100%; box-sizing:border-box">
                 </div>
                 <div class="input-group">
-                    <label style="color:var(--dim); font-size:12px">SOLUTION TYPE (DEVICE)</label>
+                    <label id="lbl-device" style="color:var(--dim); font-size:12px">SOLUTION TYPE (DEVICE)</label>
                     <input type="text" id="edit-device" style="width:100%; box-sizing:border-box">
                 </div>
                 <div class="input-group">
-                    <label style="color:var(--dim); font-size:12px">GW / CONNECTION</label>
+                    <label id="lbl-gw" style="color:var(--dim); font-size:12px">GW / CONNECTION</label>
                     <input type="text" id="edit-gw" style="width:100%; box-sizing:border-box">
                 </div>
                 <div class="input-group">
-                    <label style="color:var(--dim); font-size:12px">PROJECT MANAGER</label>
+                    <label id="lbl-pm" style="color:var(--dim); font-size:12px">PROJECT MANAGER</label>
                     <input type="text" id="edit-pm" style="width:100%; box-sizing:border-box">
                 </div>
                 <div class="input-group">
-                    <label style="color:var(--dim); font-size:12px">VERSION</label>
+                    <label id="lbl-ver" style="color:var(--dim); font-size:12px">VERSION</label>
                     <input type="text" id="edit-version" style="width:100%; box-sizing:border-box">
                 </div>
                 <div class="input-group" style="grid-column: span 2;">
@@ -1978,7 +1982,7 @@ class handler(http.server.SimpleHTTPRequestHandler):
                 renderReports();
             } else if (sect === 'guides') {  
                 const cat = guides_data.find(c => c.id == selectedCatId);
-                if (cat && cat.type === 'table') {
+                if (cat && (cat.type === 'table' || (cat.type && cat.type.startsWith('table')))) {
                     document.getElementById('filter-box').style.display = 'flex';
                     document.querySelector('.sub-nav').style.display = 'flex';
                     document.querySelector('.kpi-row').style.display = 'grid';
@@ -2795,7 +2799,8 @@ class handler(http.server.SimpleHTTPRequestHandler):
         async function deleteCat(catId) {
             if(!confirm("Are you sure? This will delete the category AND all its guides. This cannot be undone.")) return;
             guides_data = guides_data.filter(c => c.id != catId);
-            await syncGuides();
+            
+            // Optimistic Update
             if(selectedCatId === catId) {
                 selectedCatId = null;
                 selectedGuideId = null;
@@ -2803,15 +2808,37 @@ class handler(http.server.SimpleHTTPRequestHandler):
             } else {
                 update();
             }
+            
+            // Save in background (no refresh needed as we just updated local state)
+            try {
+                await fetch('/api/guides/save', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(guides_data)
+                });
+                console.log("Category deletion synced to backend.");
+            } catch(e) {
+                console.error("Backend sync failed:", e);
+                // We don't alert here to avoid annoying the user if it's transient, 
+                // but strictly we should.
+            }
         }
         async function deleteGuide(catId, guideId) {
             if(!confirm("Delete this guide?")) return;
             const cat = guides_data.find(c => c.id == catId);
             cat.guides = cat.guides.filter(g => g.id != guideId);
-            await syncGuides();
+            
+            // Optimistic Update
             renderGuidesForCat(catId);
+            
+            // Background Save
+            fetch('/api/guides/save', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(guides_data)
+            }).catch(e => console.error(e));
         }
-        async function syncGuides() {
+        async function syncGuides(doRefresh = true) {
             try {
                 const resp = await fetch('/api/guides/save', {
                     method: 'POST',
@@ -2827,32 +2854,87 @@ class handler(http.server.SimpleHTTPRequestHandler):
                 console.error("Sync error:", e);
                 alert("שגיאת שמירה: הנתונים לא נשמרו בשרת. וודא שאתה מחובר.");
             }
-            refresh();
+            if(doRefresh) refresh();
         }
         function renderIntegrations(data) {
             const h = document.getElementById('thead');
-            h.innerHTML = `<tr><th>פרויקט</th><th>סוג מכשיר</th><th>GW</th><th>מנהל</th><th>גרסה</th><th style="width:80px">מדריכים</th><th style="width:100px">פעולה</th></tr>`;
+            const cat = guides_data.find(c => c.id == selectedCatId);
+            const type = (cat && cat.type) ? cat.type : 'project';
+
+            // Headers Mapping
+            if (type === 'table_phones') {
+                h.innerHTML = `<tr><th>שם / מחלקה</th><th>מספר טלפון</th><th>תפקיד / הערה</th><th>אימייל</th><th>פעולה</th></tr>`;
+            } else if (type === 'table_ip') {
+                h.innerHTML = `<tr><th>שם שרת / התקן</th><th>כתובת IP</th><th>מיקום / VLAN</th><th>PORT / מידע</th><th>פעולה</th></tr>`;
+            } else if (type === 'table_pass') {
+                h.innerHTML = `<tr><th>שם מערכת</th><th>שם משתמש</th><th>*********</th><th>הערות</th><th>פעולה</th></tr>`;
+            } else if (type === 'table_general') {
+                h.innerHTML = `<tr><th>שם פריט</th><th>תיאור</th><th>סטטוס</th><th>הערות נוספות</th><th>פעולה</th></tr>`;
+            } else {
+                // Default Project/Integrations Table
+                h.innerHTML = `<tr><th>פרויקט</th><th>סוג מכשיר</th><th>GW</th><th>מנהל</th><th>גרסה</th><th style="width:80px">מדריכים</th><th style="width:100px">פעולה</th></tr>`;
+            }
             
             const b = document.getElementById('files'); b.innerHTML = '';
             data.forEach((r, idx) => {
-                // Determine the correct global index or local index for editing
                 let editIdx = idx;
                 if (sect === 'customers' && subSect === 'projects') {
                     editIdx = stats_data.Integrations.indexOf(r);
                 }
 
-                const sheet = r.Sheet ? `<a href="${r.Sheet}" target="_blank" title="Release Sheet" style="text-decoration:none; font-size:24px; margin:0 5px;">📄</a>` : '';
-                const note = r.Note ? `<a href="${r.Note}" target="_blank" title="Release Note" style="text-decoration:none; font-size:24px; margin:0 5px;">📝</a>` : '';
-                const manual = r.Manual ? `<a href="${r.Manual}" target="_blank" title="Manual/Config" style="text-decoration:none; font-size:24px; margin:0 5px;">⚙️</a>` : '';
-                b.innerHTML += `<tr>
-                    <td><b>${r.Customer}</b></td>
-                    <td>${r.Device}</td>
-                    <td><span style="background:rgba(59,130,246,0.1); padding:4px 10px; border-radius:6px; color:#60a5fa; font-size:14px">${r.GW}</span></td>
-                    <td>${r.PM}</td>
-                    <td><span style="color:${r.Version?'#fff':'#ef4444'}">${r.Version || "MISSING"}</span></td>
-                    <td style="text-align:center; display:flex; justify-content:center; align-items:center; gap:5px;">${sheet} ${note} ${manual}</td>
-                    <td><button onclick="openEdit(${editIdx})" style="background:rgba(255,255,255,0.05); border:1px solid var(--border); color:#fff; padding:5px 12px; border-radius:8px; cursor:pointer; font-size:12px">Edit</button></td>
-                </tr>`;
+                // Render Row based on Type (reusing existing fields as generic storage)
+                // Mapping: Customer->Col1, Device->Col2, GW->Col3, PM->Col4, Version->Col5
+                
+                let rowHtml = '';
+                if (type === 'table_phones') {
+                    rowHtml = `
+                        <td><b>${r.Customer || ''}</b></td>
+                        <td><a href="tel:${r.Device}" style="color:var(--accent); text-decoration:none">${r.Device || ''}</a></td>
+                        <td>${r.GW || ''}</td>
+                        <td>${r.PM || ''}</td>
+                        <td><button onclick="openEdit(${editIdx})" style="background:rgba(255,255,255,0.05); border:1px solid var(--border); color:#fff; padding:5px 12px; border-radius:8px; cursor:pointer; font-size:12px">Edit</button></td>
+                    `;
+                } else if (type === 'table_ip') {
+                    rowHtml = `
+                        <td><b>${r.Customer || ''}</b></td>
+                        <td style="font-family:monospace; color:#10b981">${r.Device || ''}</td>
+                        <td>${r.GW || ''}</td>
+                        <td>${r.PM || ''}</td>
+                        <td><button onclick="openEdit(${editIdx})" style="background:rgba(255,255,255,0.05); border:1px solid var(--border); color:#fff; padding:5px 12px; border-radius:8px; cursor:pointer; font-size:12px">Edit</button></td>
+                    `;
+                } else if (type === 'table_pass') {
+                    rowHtml = `
+                        <td><b>${r.Customer || ''}</b></td>
+                        <td>${r.Device || ''}</td>
+                        <td style="filter:blur(4px); cursor:pointer" onclick="this.style.filter='none'">${r.GW || ''}</td>
+                        <td>${r.PM || ''}</td>
+                        <td><button onclick="openEdit(${editIdx})" style="background:rgba(255,255,255,0.05); border:1px solid var(--border); color:#fff; padding:5px 12px; border-radius:8px; cursor:pointer; font-size:12px">Edit</button></td>
+                    `;
+                } else if (type === 'table_general') {
+                     rowHtml = `
+                        <td><b>${r.Customer || ''}</b></td>
+                        <td>${r.Device || ''}</td>
+                        <td><span style="background:rgba(255,255,255,0.1); padding:2px 8px; border-radius:4px">${r.GW || ''}</span></td>
+                        <td>${r.PM || ''}</td>
+                        <td><button onclick="openEdit(${editIdx})" style="background:rgba(255,255,255,0.05); border:1px solid var(--border); color:#fff; padding:5px 12px; border-radius:8px; cursor:pointer; font-size:12px">Edit</button></td>
+                    `;
+                } else {
+                    // Default Project Row
+                    const sheet = r.Sheet ? `<a href="${r.Sheet}" target="_blank" title="Release Sheet" style="text-decoration:none; font-size:24px; margin:0 5px;">📄</a>` : '';
+                    const note = r.Note ? `<a href="${r.Note}" target="_blank" title="Release Note" style="text-decoration:none; font-size:24px; margin:0 5px;">📝</a>` : '';
+                    const manual = r.Manual ? `<a href="${r.Manual}" target="_blank" title="Manual/Config" style="text-decoration:none; font-size:24px; margin:0 5px;">⚙️</a>` : '';
+                    rowHtml = `
+                        <td><b>${r.Customer}</b></td>
+                        <td>${r.Device}</td>
+                        <td><span style="background:rgba(59,130,246,0.1); padding:4px 10px; border-radius:6px; color:#60a5fa; font-size:14px">${r.GW}</span></td>
+                        <td>${r.PM}</td>
+                        <td><span style="color:${r.Version?'#fff':'#ef4444'}">${r.Version || "MISSING"}</span></td>
+                        <td style="text-align:center; display:flex; justify-content:center; align-items:center; gap:5px;">${sheet} ${note} ${manual}</td>
+                        <td><button onclick="openEdit(${editIdx})" style="background:rgba(255,255,255,0.05); border:1px solid var(--border); color:#fff; padding:5px 12px; border-radius:8px; cursor:pointer; font-size:12px">Edit</button></td>
+                    `;
+                }
+
+                b.innerHTML += `<tr>${rowHtml}</tr>`;
             });
         }
 
@@ -2895,10 +2977,33 @@ class handler(http.server.SimpleHTTPRequestHandler):
         }
         function openEdit(idx) {
             currentEditIdx = idx;
-            document.getElementById('edit-modal').querySelector('b').innerText = 'Edit Project Data';
+            document.getElementById('edit-modal').querySelector('b').innerText = 'Edit Item';
             
             let data_source = (sect === 'customers') ? stats_data.Integrations : (guides_data.find(c=>c.id==selectedCatId)?.guides || []);
             const r = data_source[idx];
+            const cat = guides_data.find(c => c.id == selectedCatId);
+            const type = (cat && cat.type) ? cat.type : 'project';
+
+            // Dynamic Labels
+            if (type === 'table_phones') {
+                document.getElementById('lbl-cust').innerText = 'שם / מחלקה';
+                document.getElementById('lbl-device').innerText = 'מספר טלפון';
+                document.getElementById('lbl-gw').innerText = 'תפקיד / הערה';
+                document.getElementById('lbl-pm').innerText = 'אימייל';
+                document.getElementById('lbl-ver').innerText = '---';
+            } else if (type === 'table_ip') {
+                document.getElementById('lbl-cust').innerText = 'שם שרת';
+                document.getElementById('lbl-device').innerText = 'כתובת IP';
+                document.getElementById('lbl-gw').innerText = 'מיקום / VLAN';
+                document.getElementById('lbl-pm').innerText = 'PORT';
+                document.getElementById('lbl-ver').innerText = '---';
+             } else {
+                document.getElementById('lbl-cust').innerText = 'CUSTOMER';
+                document.getElementById('lbl-device').innerText = 'SOLUTION TYPE';
+                document.getElementById('lbl-gw').innerText = 'GW / CONNECTION';
+                document.getElementById('lbl-pm').innerText = 'PROJECT MANAGER';
+                document.getElementById('lbl-ver').innerText = 'VERSION';
+            }
             
             document.getElementById('edit-cust').value = r.Customer || '';
             document.getElementById('edit-device').value = r.Device || '';
