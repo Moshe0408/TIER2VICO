@@ -30,26 +30,6 @@ def ensure_utc(dt):
         return dt.replace(tzinfo=timezone.utc)
     return dt.astimezone(timezone.utc)
 
-# Support functions for consolidated data
-def get_stats():
-    try:
-        # Avoid circular dependency by using DataEngine directly
-        integrations = DataEngine.get_integrations() or []
-        categories = DataEngine.get_guides_categories() or []
-        return {
-            "Integrations": integrations,
-            "GuidesCategories": categories,
-            "CustomerLogos": CUSTOMER_LOGOS,
-            "Health": {
-                "firebase": db is not None,
-                "count": len(integrations),
-                "vercel": os.environ.get('VERCEL') is not None
-            }
-        }
-    except Exception as e:
-        err_log(f"get_stats runtime error: {e}")
-        return {"Integrations": [], "GuidesCategories": [], "error": str(e)}
-
 HAS_PARSERS = True
 PARSER_ERRORS = []
 try:
@@ -2029,24 +2009,8 @@ class handler(http.server.SimpleHTTPRequestHandler):
 
     <script>
         let subSect = 'projects', selectedSubCatId = null;
-        
-        // --- CACHE LOGIC ---
         let stats_data = { Integrations: [] };
         let guides_data = [];
-        
-        // Try to recover from localStorage for an even faster "instant" feel
-        const cached_stats = localStorage.getItem('vico_stats');
-        if(cached_stats) {
-            try {
-                const d = JSON.parse(cached_stats);
-                if(!stats_data.Integrations || stats_data.Integrations.length === 0) {
-                    stats_data = d;
-                    guides_data = d.GuidesCategories || [];
-                    console.log("Loaded from localStorage cache");
-                }
-            } catch(e) { console.error("Cache parse error", e); }
-        }
-
         let editingCatId = null;
         let editingGuideId = null;
         
@@ -2096,15 +2060,7 @@ class handler(http.server.SimpleHTTPRequestHandler):
             window.addEventListener('hashchange', parseHash);
             parseHash(false);
 
-            // Instant Render if we have data
-            if(stats_data && stats_data.Integrations && stats_data.Integrations.length > 0) {
-                update();
-                const overlay = document.getElementById('loading-overlay');
-                if(overlay) { overlay.style.opacity = '0'; setTimeout(() => overlay.style.display = 'none', 500); }
-            }
-
-            // Sync with server in background
-            refresh();
+            await refresh();
             setInterval(refresh, 60000);
             
             // Setup Drag & Drop for guides
@@ -2366,8 +2322,56 @@ class handler(http.server.SimpleHTTPRequestHandler):
             tree.innerHTML = html;
         }
 
+        
+        // Load guides from Firestore (Merged Logic)
+        async function loadGuidesFromFirestore() {
+            try {
+                const { collection, getDocs } = window.firebaseRefs;
+                
+                // 1. Fetch Categories
+                const catCol = collection(window.db, 'guides_categories');
+                const catSnap = await getDocs(catCol);
+                let cats = [];
+                if (!catSnap.empty) {
+                    cats = catSnap.docs.map(doc => ({ id: doc.id, guides: [], ...doc.data() }));
+                }
 
-        // Note: loadGuidesFromFirestore removed in favor of /api/stats consolidation
+                // 2. Fetch Guides
+                const guidesCol = collection(window.db, 'guides');
+                const guideSnap = await getDocs(guidesCol);
+                let guides = [];
+                if (!guideSnap.empty) {
+                    guides = guideSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                }
+
+                // 3. Merge Guides into Categories
+                cats.forEach(c => {
+                    // Filter guides belonging to this category
+                    c.guides = guides.filter(g => g.Category === c.id);
+                });
+                
+                // If cats is empty but guides exist (orphaned?), potentially handle them.
+                // For now, we trust the cats list.
+                
+                if (cats.length > 0) {
+                    guides_data = cats;
+                    console.log(`Loaded ${cats.length} categories and ${guides.length} guides from Firestore.`);
+                } else {
+                    console.log('No categories field found, trying legacy or empty.');
+                    guides_data = [];
+                }
+            } catch(e) {
+                console.error("Firestore load error:", e);
+                // Fallback to API if Firestore fails
+                try {
+                    const res = await fetch('/api/stats');
+                    const data = await res.json();
+                    if(data.Guides) guides_data = data.Guides;
+                } catch(apiError) {
+                    console.error("API fallback failed:", apiError);
+                }
+            }
+        }
 
         async function syncGDrive() {
              console.log("GDrive sync removed.");
@@ -2406,9 +2410,6 @@ class handler(http.server.SimpleHTTPRequestHandler):
                 if (data.GuidesCategories) {
                     guides_data = data.GuidesCategories;
                 }
-                
-                // Save to cache for next visit
-                localStorage.setItem('vico_stats', JSON.stringify(data));
                 
                 update();
                 
