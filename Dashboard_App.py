@@ -836,21 +836,32 @@ class DataEngine:
 
 
 class handler(http.server.SimpleHTTPRequestHandler):
+    # Static Session Cache (Shared across requests in the same process)
+    _sess_cache = {}
+
     def is_authenticated(self):
-        cookies = http.cookies.SimpleCookie(self.headers.get('Cookie'))
+        cookie_header = self.headers.get('Cookie')
+        if not cookie_header: return False
+        
+        cookies = http.cookies.SimpleCookie(cookie_header)
         sid = cookies.get('sid')
         if not sid: return False
         
         sid_val = sid.value
         now = get_now_utc()
         
-        # 1. Fast Memory Check
+        # 1. Thread-local Memory Check (Local SESSIONS dict)
         if sid_val in SESSIONS:
             sess = SESSIONS[sid_val]
             exp = ensure_utc(sess.get('expiry'))
             if exp and exp > now: return True
+
+        # 2. Handler Static Cache (survives across requests in same instance)
+        if sid_val in handler._sess_cache:
+            cache_val = handler._sess_cache[sid_val]
+            if cache_val > now.timestamp(): return True
         
-        # 2. Firestore Check (with fast timeout)
+        # 3. Firestore Check (with fast timeout)
         if db:
             try:
                 # Use a small timeout to prevent dashboard hang
@@ -860,13 +871,17 @@ class handler(http.server.SimpleHTTPRequestHandler):
                     exp = ensure_utc(data.get('expiry'))
                     if exp and exp > now:
                         SESSIONS[sid_val] = data
+                        handler._sess_cache[sid_val] = exp.timestamp()
                         return True
             except Exception as e:
                 err_log(f"Session auth hang/error: {e}")
                 # Emergency Fallback: If we had a cookie but DB is slow, 
                 # let's assume it's OK for 30 seconds to prevent white screen
-                # ONLY if we have some reason to (e.g. valid UUID format)
                 if len(sid_val) > 20: return True
+        else:
+            # Fallback if Firestore is globally missing/failed
+            if len(sid_val) > 20: return True
+            
         return False
 
     def save_session(self, sid, email):
@@ -1469,6 +1484,14 @@ class handler(http.server.SimpleHTTPRequestHandler):
         
         html, body { margin:0; padding:0; height:100vh; width:100vw; overflow:hidden; background: var(--bg); color: var(--text); font-family: 'Outfit', sans-serif; display: flex; flex-direction: column; align-items: stretch; font-size: 18px; direction: rtl; box-sizing: border-box; }
         
+        #loading-overlay { 
+            position: fixed; inset: 0; background: var(--bg); z-index: 10000; 
+            display: flex; flex-direction: column; align-items: center; justify-content: center; 
+            transition: 0.5s; 
+        }
+        .spinner { width: 50px; height: 50px; border: 3px solid rgba(255,255,255,0.1); border-top-color: var(--primary); border-radius: 50%; animation: spin 1s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        
         .top-bar { height: 100px; width: 100vw; background: #0f172a; border-bottom: 2px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 40px; box-shadow: 0 10px 50px rgba(0,0,0,0.5); z-index: 100; box-sizing: border-box; }
         .logo { font-size: 32px; font-weight: 900; background: linear-gradient(to left, #60a5fa, #34d399); -webkit-background-clip: text; -webkit-text-fill-color: transparent; letter-spacing: -1.5px; }
         .nav-links { display: flex; gap: 10px; }
@@ -1685,6 +1708,11 @@ class handler(http.server.SimpleHTTPRequestHandler):
     </style>
 </head>
 <body>
+    <div id="loading-overlay">
+        <div class="spinner"></div>
+        <p style="margin-top:20px; color:var(--dim); font-weight:800; letter-spacing:1px;">טוען את המערכת...</p>
+    </div>
+
     <div class="top-bar">
         <div style="flex:1; display:flex; gap:20px; align-items:center;">
             <h1 style="font-size:24px; font-weight:900; background: linear-gradient(to right, #60a5fa, #a78bfa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; min-width:max-content;">TIER 2 VICO</h1>
@@ -2000,6 +2028,16 @@ class handler(http.server.SimpleHTTPRequestHandler):
 
         async function init() {
             console.log("init() started");
+            
+            // Fail-safe to remove loader if something hangs
+            setTimeout(() => {
+                const overlay = document.getElementById('loading-overlay');
+                if(overlay && overlay.style.display !== 'none') {
+                    console.warn("Loader fail-safe triggered");
+                    overlay.style.opacity = '0';
+                    setTimeout(() => overlay.style.display = 'none', 500);
+                }
+            }, 8000);
             // Check System Health
             fetch('/api/health').then(r => r.json()).then(h => {
                 const fb = document.getElementById('h-firebase');
@@ -2374,6 +2412,13 @@ class handler(http.server.SimpleHTTPRequestHandler):
                 }
                 
                 update();
+                
+                // Hide loader on success
+                const overlay = document.getElementById('loading-overlay');
+                if(overlay) {
+                    overlay.style.opacity = '0';
+                    setTimeout(() => overlay.style.display = 'none', 500);
+                }
             } catch(e) { 
                 console.error("Poll error:", e);
                 // Try to find a loader if it exists (generic)
