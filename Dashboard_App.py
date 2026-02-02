@@ -2269,6 +2269,10 @@ class handler(http.server.SimpleHTTPRequestHandler):
             let html = `
                 <div class="nav-tree-item ${!selectedGuideId && !selectedSubCatId ? 'active' : ''}" onclick="selectedGuideId=null; selectedSubCatId=null; update();" style="font-weight:900; color:var(--accent); margin-bottom:10px; background:rgba(16,185,129,0.1); border-radius:12px; border:1px solid rgba(16,185,129,0.2);">
                     🏠 סקירה כללית
+                </div>
+                
+                <div class="nav-tree-item" onclick="openAddSubCat()" style="font-weight:900; color:#fff; margin-bottom:20px; background:linear-gradient(135deg, var(--primary), var(--accent)); border-radius:12px; border:none; justify-content:center; box-shadow:0 5px 15px rgba(59,130,246,0.3);">
+                    📂 הוסף תיקייה חדשה +
                 </div>`;
 
             const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
