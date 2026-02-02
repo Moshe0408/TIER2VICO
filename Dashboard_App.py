@@ -2378,6 +2378,14 @@ class handler(http.server.SimpleHTTPRequestHandler):
                     }
                     throw new Error(`API returned ${res.status}`);
                 }
+                
+                const contentType = res.headers.get("content-type");
+                if (contentType && contentType.indexOf("application/json") === -1) {
+                    console.warn("API returned non-JSON content (" + contentType + "). Redirecting to login...");
+                    window.location.href = '/login';
+                    return;
+                }
+
                 const data = await res.json();
                 stats_data = data;
                 
