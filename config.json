@@ -1,0 +1,54 @@
+{
+    "scripts": {
+        "Shufersal_Giftcard": {
+            "file": "Shufersal_Giftcard.py",
+            "cron": {
+                "hour": 12,
+                "minute": 0
+            },
+            "description": "Shufersal_Giftcard"
+        },
+        "STFPTEST": {
+            "file": "STFPTEST.py",
+            "cron": {
+                "hour": 5,
+                "minute": 0
+            },
+            "description": "Stfp Mail Shufersal"
+        },
+        "STFPNOW": {
+            "file": "STFPNOW.py",
+            "cron": {
+                "hour": 4,
+                "minute": 30
+            },
+            "description": "STFP ורטיקלים"
+        },
+        "TIER2": {
+            "file": "TIER2.py",
+            "cron": {
+                "hour": 8,
+                "minute": 0
+            },
+            "description": "דוח Tier2"
+        },
+        "KIBANA_IKEA": {
+            "file": "kibana_auto_master.py",
+            "cron": {
+                "hour": 22,
+                "minute": 30
+            },
+            "description": "אימות שגיאות איקאה (Kibana)"
+        },
+        "COMBINED_REPORTER": {
+            "file": "Combined_Reporter.py",
+            "cron": {
+                "hour": 23,
+                "minute": 15
+            },
+            "description": "דוח משולב (Tickets + Calls)"
+        }
+    },
+    "theme": "cyborg",
+    "base_dir": "C:\\Users\\moshei1\\OneDrive - Verifone\\Desktop\\TIP\\STFPNOW\\בדיקות"
+}

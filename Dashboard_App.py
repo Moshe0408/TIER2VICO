@@ -778,31 +778,53 @@ class DataEngine:
                             
                             with open(out_path, "wb") as f:
                                 f.write(content)
-                            
-                            log(f"SAVED IMAGE: {out_path} ({len(content)} bytes)")
-                            return {"src": f"/uploads/{safe_name}"}
-                    except Exception as e:
-                        err_log(f"Mammoth extraction error: {e}")
-                        return {"src": ""}
-
-                style_map = "p[style-name='Heading 1'] => h1:fresh\np[style-name='Heading 2'] => h2:fresh\np[style-name='Heading 3'] => h3:fresh\nr[style-name='Strong'] => b"
-                
-                with open(file_path, "rb") as docx_file:
-                    result = mammoth.convert_to_html(docx_file, 
-                        convert_image=mammoth.images.img_element(handle_image),
-                        style_map=style_map
-                    )
-                    html = result.value
-                    log(f"Extraction complete. HTML length: {len(html)}")
-                    return html
+                if not HAS_PARSERS or 'python-docx' in PARSER_ERRORS: return "docx parser missing"
+                doc = docx.Document(file_path)
+                html = ""
+                # Use mammoth if available for better HTML with images
+                if 'mammoth' not in PARSER_ERRORS:
+                    with open(file_path, "rb") as docx_file:
+                        res = mammoth.convert_to_html(docx_file)
+                        html = res.value
+                else:
+                    for para in doc.paragraphs:
+                        html += f"<p>{para.text}</p>"
+                return html
             elif ext == '.pdf':
-                text = ""
-                with open(file_path, 'rb') as f:
-                    pdf = PyPDF2.PdfReader(f)
-                    for page in pdf.pages:
-                        page_text = page.extract_text() or ""
-                        text += page_text + "\n\n"
-                return text.replace('\n', '<br>')
+                try:
+                    import fitz  # PyMuPDF
+                    doc = fitz.open(file_path)
+                    content = ""
+                    for page_index, page in enumerate(doc):
+                        # Extract text
+                        text = page.get_text("html")
+                        content += text
+                        
+                        # Extract images
+                        image_list = page.get_images()
+                        for img_index, img in enumerate(image_list):
+                            xref = img[0]
+                            pix = fitz.Pixmap(doc, xref)
+                            if pix.n - pix.alpha > 3: # CMYK: convert to RGB first
+                                pix = fitz.Pixmap(fitz.csRGB, pix)
+                            
+                            img_filename = f"img_{os.path.basename(file_path)}_{page_index}_{img_index}.png"
+                            img_path = os.path.join(UPLOAD_DIR, img_filename)
+                            pix.save(img_path)
+                            pix = None # free resource
+                            
+                            content += f'<br><img src="/uploads/{img_filename}" style="max-width:100%; margin: 10px 0;"><br>'
+                            
+                    return content
+                except ImportError:
+                    # Fallback to PyPDF2
+                    if not HAS_PARSERS or 'PyPDF2' in PARSER_ERRORS: return "PyPDF2 parser missing"
+                    text = ""
+                    with open(file_path, 'rb') as f:
+                        pdf = PyPDF2.PdfReader(f)
+                        for page in pdf.pages:
+                            text += page.extract_text() + "\n\n"
+                    return text.replace('\n', '<br>')
             elif ext == '.txt':
                 with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
                     return f.read().replace('\n', '<br>')
