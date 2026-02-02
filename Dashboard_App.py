@@ -3325,6 +3325,86 @@ class handler(http.server.SimpleHTTPRequestHandler):
             update();
         }
 
+        function renderIntegrations(data) {
+            const table = document.getElementById('perf-card');
+            if(!table) return;
+            
+            const cat = guides_data.find(c => c.id == selectedCatId);
+            const type = (cat && cat.type) ? cat.type : 'project';
+            
+            // Dynamic headers based on type
+            let headers = ['לקוח', 'פתרון', 'חיבור', 'מנהל', 'גרסה', 'פעולות'];
+            if (type === 'table_phones') {
+                headers = ['שם / מחלקה', 'מספר טלפון', 'תפקיד / הערה', 'אימייל', '', 'פעולות'];
+            } else if (type === 'table_ip') {
+                headers = ['שם שרת', 'כתובת IP', 'מיקום / VLAN', 'PORT', '', 'פעולות'];
+            } else if (type === 'table_pass') {
+                headers = ['שם מערכת', 'שם משתמש', 'סיסמה', 'הערות', '', 'פעולות'];
+            } else if (type === 'table_general') {
+                headers = ['שם פריט', 'תיאור', 'סטטוס', 'הערות נוספות', '', 'פעולות'];
+            }
+            
+            let html = `
+                <div class="card-t">רשימת נתונים</div>
+                <table style="width:100%; border-collapse:collapse;">
+                    <thead>
+                        <tr style="border-bottom:2px solid var(--border);">
+                            ${headers.map(h => h ? `<th style="padding:15px; text-align:right; font-weight:900; color:var(--accent);">${h}</th>` : '<th></th>').join('')}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${data.map((r, idx) => `
+                            <tr style="border-bottom:1px solid var(--border); cursor:pointer; transition:0.2s;" 
+                                onmouseover="this.style.background='rgba(255,255,255,0.03)'" 
+                                onmouseout="this.style.background='transparent'"
+                                onclick="openEdit(${idx})">
+                                <td style="padding:15px;">${r.Customer || ''}</td>
+                                <td style="padding:15px;">${r.Device || ''}</td>
+                                <td style="padding:15px;">${r.GW || ''}</td>
+                                <td style="padding:15px;">${r.PM || ''}</td>
+                                <td style="padding:15px;">${r.Version || ''}</td>
+                                <td style="padding:15px;">
+                                    <button onclick="event.stopPropagation(); deleteTableItem(${idx})" 
+                                            style="padding:8px 12px; background:#ef4444; border:none; border-radius:8px; cursor:pointer; color:white; font-weight:bold;">
+                                        🗑️
+                                    </button>
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+            
+            table.innerHTML = html;
+        }
+        
+        async function deleteTableItem(idx) {
+            if(!confirm('האם למחוק פריט זה?')) return;
+            
+            if (sect === 'customers') {
+                stats_data.Integrations.splice(idx, 1);
+                try {
+                    await fetch('/api/integrations/save', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(stats_data.Integrations)
+                    });
+                } catch(e) {
+                    console.error("Delete error:", e);
+                    alert("שגיאת מחיקה");
+                }
+            } else {
+                const cat = guides_data.find(c => c.id == selectedCatId);
+                if (cat && cat.guides) {
+                    cat.guides.splice(idx, 1);
+                    await syncGuides();
+                }
+            }
+            
+            update();
+            alert('הפריט נמחק בהצלחה');
+        }
+
         function renderManagers(data) {
             let m = document.getElementById('manager-view');
             if(!m) { m = document.createElement('div'); m.id = 'manager-view'; document.getElementById('capture-area').appendChild(m); }
