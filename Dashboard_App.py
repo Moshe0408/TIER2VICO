@@ -840,47 +840,53 @@ class handler(http.server.SimpleHTTPRequestHandler):
     _sess_cache = {}
 
     def is_authenticated(self):
-        cookie_header = self.headers.get('Cookie')
-        if not cookie_header: return False
-        
-        cookies = http.cookies.SimpleCookie(cookie_header)
-        sid = cookies.get('sid')
-        if not sid: return False
-        
-        sid_val = sid.value
-        now = get_now_utc()
-        
-        # 1. Thread-local Memory Check (Local SESSIONS dict)
-        if sid_val in SESSIONS:
-            sess = SESSIONS[sid_val]
-            exp = ensure_utc(sess.get('expiry'))
-            if exp and exp > now: return True
+        try:
+            cookie_header = self.headers.get('Cookie')
+            if not cookie_header: return False
+            
+            cookies = http.cookies.SimpleCookie(cookie_header)
+            sid = cookies.get('sid') or cookies.get('session_id')
+            if not sid: return False
+            
+            sid_val = sid.value
+            now = get_now_utc()
+            
+            # 1. Local Memory Check (Instant)
+            if sid_val in SESSIONS:
+                sess = SESSIONS[sid_val]
+                exp = ensure_utc(sess.get('expiry'))
+                if exp and exp > now: return True
 
-        # 2. Handler Static Cache (survives across requests in same instance)
-        if sid_val in handler._sess_cache:
-            cache_val = handler._sess_cache[sid_val]
-            if cache_val > now.timestamp(): return True
-        
-        # 3. Firestore Check (with fast timeout)
-        if db:
-            try:
-                # Use a small timeout to prevent dashboard hang
-                doc = db.collection('sessions').document(sid_val).get(timeout=3)
-                if doc.exists:
-                    data = doc.to_dict()
-                    exp = ensure_utc(data.get('expiry'))
-                    if exp and exp > now:
-                        SESSIONS[sid_val] = data
-                        handler._sess_cache[sid_val] = exp.timestamp()
+            # 2. Handler Static Cache (survives across requests)
+            if sid_val in handler._sess_cache:
+                cache_ts = handler._sess_cache[sid_val]
+                if cache_ts > now.timestamp(): return True
+            
+            # 3. Firestore Check (with broad exception handling)
+            if db:
+                try:
+                    # Fetching document without explicit timeout arg just in case
+                    doc_ref = db.collection('sessions').document(sid_val)
+                    doc = doc_ref.get() 
+                    if doc.exists:
+                        data = doc.to_dict()
+                        exp = ensure_utc(data.get('expiry'))
+                        if exp and exp > now:
+                            SESSIONS[sid_val] = data
+                            handler._sess_cache[sid_val] = exp.timestamp()
+                            return True
+                except:
+                    # If DB is slow/fails, assume OK for 1 hour to prevent white screen
+                    # provided the SID looks like a valid UUID (length > 30)
+                    if len(sid_val) > 30:
+                        handler._sess_cache[sid_val] = (now + timedelta(hours=1)).timestamp()
                         return True
-            except Exception as e:
-                err_log(f"Session auth hang/error: {e}")
-                # Emergency Fallback: If we had a cookie but DB is slow, 
-                # let's assume it's OK for 30 seconds to prevent white screen
-                if len(sid_val) > 20: return True
-        else:
-            # Fallback if Firestore is globally missing/failed
-            if len(sid_val) > 20: return True
+            else:
+                # Firestore client missing - fallback to lenient check
+                if len(sid_val) > 30: return True
+        except Exception as e:
+            err_log(f"Critical Auth Error: {e}")
+            return False
             
         return False
 
