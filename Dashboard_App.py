@@ -3132,7 +3132,21 @@ class handler(http.server.SimpleHTTPRequestHandler):
         }
         function filterIntegrations() {
             const t = document.getElementById('cust-search').value.toLowerCase();
-            const f = stats_data.Integrations.filter(x => x.Customer.toLowerCase().includes(t) || x.PM.toLowerCase().includes(t));
+            
+            let source = [];
+            if (sect === 'customers') {
+                source = stats_data.Integrations;
+            } else if (sect === 'guides') {
+                const cat = guides_data.find(c => c.id == selectedCatId);
+                source = cat ? (cat.guides || []) : [];
+            }
+
+            const f = source.filter(x => {
+                const cust = (x.Customer || '').toLowerCase();
+                const pm = (x.PM || '').toLowerCase();
+                const dev = (x.Device || '').toLowerCase();
+                return cust.includes(t) || pm.includes(t) || dev.includes(t);
+            });
             renderIntegrations(f);
         }
         function uk(a,b,c,d,e,f,g,h) {
