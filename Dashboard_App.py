@@ -1978,6 +1978,37 @@ class handler(http.server.SimpleHTTPRequestHandler):
         </div>
     </div>
 
+    <!-- CATEGORY MODAL -->
+    <div class="modal" id="cat-modal" style="width:600px;">
+        <div style="background:#0f172a; padding:15px 25px; display:flex; justify-content:space-between; align-items:center;">
+            <b>הוספת קטגוריה חדשה</b><button onclick="closeM()" style="background:none; border:none; color:#ef4444; font-size:24px; cursor:pointer;">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="input-group">
+                <label style="color:var(--dim); font-size:12px; margin-bottom:8px; display:block;">שם הקטגוריה</label>
+                <input type="text" id="cat-name" placeholder="לדוגמה: מדריכי VPN" style="width:100%; box-sizing:border-box">
+            </div>
+            
+            <div class="input-group">
+                <label style="color:var(--dim); font-size:12px; margin-bottom:8px; display:block;">אימוג'י</label>
+                <input type="text" id="cat-emoji" placeholder="📚" maxlength="2" style="width:100%; box-sizing:border-box; font-size:32px; text-align:center;">
+            </div>
+            
+            <div class="input-group">
+                <label style="color:var(--dim); font-size:12px; margin-bottom:8px; display:block;">סוג קטגוריה</label>
+                <select id="cat-type" style="width:100%; box-sizing:border-box; background:rgba(255,255,255,0.05); border:1px solid var(--border); padding:15px; border-radius:10px; color:#fff; font-family:inherit; font-size:16px;">
+                    <option value="guides">מדריכים רגילים</option>
+                    <option value="table_pass">טבלת סיסמאות</option>
+                    <option value="table_ip">טבלת IP</option>
+                    <option value="table_phones">טבלת טלפונים</option>
+                    <option value="table_general">טבלה כללית</option>
+                </select>
+            </div>
+            
+            <button class="btn" id="cat-save-btn" onclick="saveCategory()" style="margin-top:20px; background:var(--primary); width:100%;">יצירת קטגוריה</button>
+        </div>
+    </div>
+
     <script>
         let subSect = 'projects', selectedSubCatId = null;
         let stats_data = { Integrations: [] };
