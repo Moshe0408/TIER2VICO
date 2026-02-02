@@ -766,21 +766,9 @@ class DataEngine:
                             if not content: return {"src": ""}
                             
                             mime = image.content_type or "image/png"
-                            img_ext = mime.split('/')[-1] if '/' in mime else 'png'
-                            if img_ext == 'octet-stream': img_ext = 'png'
-                            
-                            safe_name = f"doc_img_{uuid.uuid4()}.{img_ext}"
-                            # Ensure absolute path for reliability
-                            out_path = os.path.abspath(os.path.join(BASE_DIR, "uploads", safe_name))
-                            
-                            # Ensure dir exists
-                            os.makedirs(os.path.dirname(out_path), exist_ok=True)
-                            
-                            with open(out_path, "wb") as f:
-                                f.write(content)
-                            
-                            log(f"SAVED IMAGE: {out_path} ({len(content)} bytes)")
-                            return {"src": f"/uploads/{safe_name}"}
+                            # Convert directly to Base64
+                            b64 = base64.b64encode(content).decode('utf-8')
+                            return {"src": f"data:{mime};base64,{b64}"}
                     except Exception as e:
                         err_log(f"Mammoth extraction error: {e}")
                         return {"src": ""}
@@ -809,7 +797,7 @@ class DataEngine:
                         text = page.get_text("html")
                         content += text
                         
-                        # Extract images
+                        # Extract images and convert to Base64
                         image_list = page.get_images()
                         for img_index, img in enumerate(image_list):
                             xref = img[0]
@@ -817,12 +805,11 @@ class DataEngine:
                             if pix.n - pix.alpha > 3: # CMYK: convert to RGB first
                                 pix = fitz.Pixmap(fitz.csRGB, pix)
                             
-                            img_filename = f"img_{os.path.basename(file_path)}_{page_index}_{img_index}.png"
-                            img_path = os.path.join(UPLOAD_DIR, img_filename)
-                            pix.save(img_path)
-                            pix = None # free resource
+                            img_data = pix.tobytes()
+                            b64 = base64.b64encode(img_data).decode('utf-8')
+                            pix = None # free
                             
-                            content += f'<br><img src="/uploads/{img_filename}" style="max-width:100%; margin: 10px 0;"><br>'
+                            content += f'<br><img src="data:image/png;base64,{b64}" style="max-width:100%; margin: 10px 0;"><br>'
                             
                     return content
                 except ImportError:
@@ -2601,7 +2588,10 @@ class handler(http.server.SimpleHTTPRequestHandler):
             contentDiv.style.margin = '0 auto';
             contentDiv.innerHTML = `
                 <div style="text-align:center; margin-bottom:50px; position:relative;">
-                    <button class="admin-btn" onclick="openEditGuide('${cat.id}', '${guide.id}')" style="position:absolute; top:0; right:0;">✏️ ערוך מדריך</button>
+                    <div style="position:absolute; top:0; right:0; display:flex; gap:10px;">
+                        <button class="admin-btn" onclick="if(confirm('למחוק את המדריך?')) deleteGuide('${cat.id}', '${guide.id}')" style="background:rgba(239,68,68,0.1); border:1px solid #ef4444; color:#ef4444; padding:5px 10px; border-radius:8px; cursor:pointer;">🗑️ מחק</button>
+                        <button class="admin-btn" onclick="openEditGuide('${cat.id}', '${guide.id}')">✏️ ערוך מדריך</button>
+                    </div>
                     <h2 style="font-size:40px; font-weight:900; background: linear-gradient(to left, #fff, var(--dim)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin:0;">${guide.title}</h2>
                     <p style="color:var(--dim); font-size:16px; margin-top:10px;">${cat.name} • ${guide.date || new Date().toLocaleDateString('he-IL')}</p>
                 </div>
