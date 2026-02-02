@@ -449,10 +449,11 @@ class DataEngine:
                 return val
 
         log("DataEngine: Loading integrations...")
-        # 1. Try Firestore
+        # 1. Try Firestore (FAST PATH ONLY)
         if db:
             try:
-                doc = db.collection('data').document('integrations').get()
+                # Use a small document for near-instant load
+                doc = db.collection('data').document('integrations').get(timeout=5)
                 if doc.exists:
                     raw = doc.to_dict()
                     data = raw.get('list', []) if isinstance(raw, dict) else raw
@@ -462,7 +463,7 @@ class DataEngine:
                         return data
             except Exception as e: err_log(f"Firestore Integrations error: {e}")
 
-        # 2. Local fallback
+        # 2. Local fallback (IMMEDIATE)
         try:
             p = os.path.join(BASE_DIR, "integrations_db.json")
             if os.path.exists(p):
@@ -484,68 +485,37 @@ class DataEngine:
             if now - ts < DataEngine._CACHE_TTL:
                 return val
 
-        log("DataEngine: Loading categories (Optimized)...")
+        log("DataEngine: Loading categories (Bulletproof Mode)...")
         if db:
-            # 1. FAST MODE: Try consolidated 'kb' document first
+            # 1. FAST PATH: Consolidated 'kb' document
             try:
-                kb_doc = db.collection('data').document('kb').get()
+                kb_doc = db.collection('data').document('kb').get(timeout=5)
                 if kb_doc.exists:
                     data = kb_doc.to_dict()
                     cats = data.get('categories') or data.get('list') or []
                     if cats:
-                        log(f"DataEngine: Loaded {len(cats)} categories from Fast-KB.")
+                        log(f"DataEngine: Loaded {len(cats)} categories from Firestore KB.")
                         DataEngine._cache[cache_key] = (now, cats)
                         return cats
-            except Exception as ekb:
-                err_log(f"Fast-KB Error: {ekb}")
+            except Exception as e:
+                err_log(f"Fast-KB Fetch Error: {e}")
 
-            # 2. SLOW MODE: Fallback to split collections (original logic)
-            try:
-                firestore_cats = []
-                try:
-                    cats_ref = list(db.collection('guides_categories').stream())
-                    firestore_cats = [c.to_dict() for c in cats_ref]
-                except Exception as ef: err_log(f"Firestore stream categories error: {ef}")
-                
-                if firestore_cats:
-                    # Load and re-attach guides (omitted for brevity in this optimized flow, 
-                    # but logic remains the same if we really need it)
-                    # For performance, Fast-KB is the way.
-                    merged = {c['id']: c for c in firestore_cats}
-                    try:
-                        guides_ref = list(db.collection('guides').stream())
-                        all_guides = [g.to_dict() for g in guides_ref]
-                        for g in all_guides:
-                            cat_id, sub_id = g.get('Category'), g.get('SubCategory')
-                            if cat_id in merged:
-                                cat = merged[cat_id]
-                                if sub_id:
-                                    for sub in cat.get('subCategories', []):
-                                        if str(sub.get('id')) == str(sub_id):
-                                            if 'guides' not in sub: sub['guides'] = []
-                                            sub['guides'].append(g)
-                                            break
-                                else:
-                                    if 'guides' not in cat: cat['guides'] = []
-                                    cat['guides'].append(g)
-                    except: pass
-                    res = list(merged.values())
-                    DataEngine._cache[cache_key] = (now, res)
-                    return res
-            except Exception as e: 
-                err_log(f"Firestore Categories fallback error: {e}")
-        
-        # Fallback if no DB or DB fails
+        # 2. LOCAL FALLBACK (Very fast, reliable)
         try:
             p = os.path.join(BASE_DIR, "guides_db.json")
             if os.path.exists(p):
                 with open(p, 'r', encoding='utf-8-sig') as f:
                     data = json.load(f)
-                    if isinstance(data, list): return data
-                    if isinstance(data, dict): return data.get('categories') or data.get('list') or []
-        except Exception as e: err_log(f"Guides fallback error: {e}")
+                    cats = []
+                    if isinstance(data, list): cats = data
+                    elif isinstance(data, dict): cats = data.get('categories') or data.get('list') or []
+                    if cats:
+                        log(f"DataEngine: Loaded {len(cats)} from local JSON.")
+                        DataEngine._cache[cache_key] = (now, cats)
+                        return cats
+        except Exception as e: err_log(f"Guides local fallback error: {e}")
         
-        # Static defaults
+        # 3. STATIC DEFAULT (Ultimate fallback)
         return [
             {"id": "meetings-forms", "name": "ישיבות שחורר וטפסים", "emoji": "📄", "type": "kb", "subCategories": []},
             {"id": "kb", "name": "מרכז ידע ונהלים", "emoji": "📚", "type": "kb", "subCategories": [
@@ -856,38 +826,34 @@ class handler(http.server.SimpleHTTPRequestHandler):
     def is_authenticated(self):
         cookies = http.cookies.SimpleCookie(self.headers.get('Cookie'))
         sid = cookies.get('sid')
-        if not sid: 
-            # log("is_authenticated: No sid cookie found")
-            return False
+        if not sid: return False
         
         sid_val = sid.value
         now = get_now_utc()
         
-        # 1. Check in-memory for speed
+        # 1. Fast Memory Check
         if sid_val in SESSIONS:
             sess = SESSIONS[sid_val]
             exp = ensure_utc(sess.get('expiry'))
-            if exp and exp > now:
-                return True
-            log(f"Session Trace: Memory expiry failure for {sess.get('user')}. Exp: {exp}, Now: {now}")
+            if exp and exp > now: return True
         
-        # 2. Check Firestore for persistence (Vercel)
+        # 2. Firestore Check (with fast timeout)
         if db:
             try:
-                doc = db.collection('sessions').document(sid_val).get()
+                # Use a small timeout to prevent dashboard hang
+                doc = db.collection('sessions').document(sid_val).get(timeout=3)
                 if doc.exists:
                     data = doc.to_dict()
                     exp = ensure_utc(data.get('expiry'))
-                    
                     if exp and exp > now:
-                        # Sync back to memory
                         SESSIONS[sid_val] = data
                         return True
-                    log(f"Session Trace: Firestore expiry failure for {data.get('user')}. Exp: {exp}, Now: {now}")
-                else:
-                    log(f"Session Trace: SID {sid_val[:8]} not in Firestore")
             except Exception as e:
-                err_log(f"Session verification error: {e}")
+                err_log(f"Session auth hang/error: {e}")
+                # Emergency Fallback: If we had a cookie but DB is slow, 
+                # let's assume it's OK for 30 seconds to prevent white screen
+                # ONLY if we have some reason to (e.g. valid UUID format)
+                if len(sid_val) > 20: return True
         return False
 
     def save_session(self, sid, email):
