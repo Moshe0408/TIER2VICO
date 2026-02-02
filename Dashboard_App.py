@@ -471,11 +471,42 @@ class DataEngine:
         log("DataEngine: Loading categories...")
         if db:
             try:
-                cats = list(db.collection('guides_categories').stream())
-                if cats: return [c.to_dict() for c in cats]
-            except Exception as e: err_log(f"Firestore Categories error: {e}")
+                # 1. Load from Firestore
+                cats_ref = list(db.collection('guides_categories').stream())
+                firestore_cats = [c.to_dict() for c in cats_ref]
+                
+                # 2. Load from Local JSON (User's file)
+                local_cats = []
+                p = os.path.join(BASE_DIR, "guides_db.json")
+                if os.path.exists(p):
+                    try:
+                        with open(p, 'r', encoding='utf-8-sig') as f:
+                            local_data = json.load(f)
+                            if isinstance(local_data, list): local_cats = local_data
+                            elif isinstance(local_data, dict): local_cats = local_data.get('categories') or local_data.get('list') or []
+                    except Exception as ex:
+                        log(f"Merge: Failed to load local JSON: {ex}")
+
+                # 3. Merge (Firestore takes precedence for modifications, but we add missing local cats)
+                # Map by ID
+                merged = {c['id']: c for c in firestore_cats}
+                
+                for l_cat in local_cats:
+                    if l_cat['id'] not in merged:
+                        log(f"Merge: Adding local category '{l_cat.get('name')}' to display.")
+                        merged[l_cat['id']] = l_cat
+                    else:
+                        # Optional: Merge guides if needed? For now, let's assume IDs match means same object.
+                        # If user updated local JSON significantly, we might want to prioritize it?
+                        # Let's keep it simple: If in Firestore, use Firestore. If only in Local, use Local.
+                        pass
+                
+                return list(merged.values())
+
+            except Exception as e: 
+                err_log(f"Firestore Categories load/merge error: {e}")
         
-        # Local Fallback
+        # Fallback if no DB or DB fails
         try:
             p = os.path.join(BASE_DIR, "guides_db.json")
             if os.path.exists(p):
@@ -3104,8 +3135,12 @@ class handler(http.server.SimpleHTTPRequestHandler):
                 if (cat) {
                     if (!cat.guides) cat.guides = [];
                     if (currentEditIdx === -1) {
+                        // Ensure ID generation for new items!
+                        data.id = Date.now().toString(); 
                         cat.guides.push(data);
                     } else {
+                        // Preserve ID if editing
+                        data.id = cat.guides[currentEditIdx].id || Date.now().toString();
                         Object.assign(cat.guides[currentEditIdx], data);
                     }
                     await syncGuides();
