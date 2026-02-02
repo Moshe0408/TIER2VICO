@@ -1275,7 +1275,8 @@ class handler(http.server.SimpleHTTPRequestHandler):
             projectId: "tier-2-vico",
             storageBucket: "tier-2-vico.firebasestorage.app",
             messagingSenderId: "272065575004",
-            appId: "1:272065575004:web:11ed615295a56dbc824e99"
+            appId: "1:272065575004:web:11ed615295a56dbc824e99",
+            measurementId: "G-57ZTPZWJSV"
         };
 
         const app = initializeApp(config);
