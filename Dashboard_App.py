@@ -17,6 +17,19 @@ import base64
 import mammoth
 import docx
 import PyPDF2
+
+def get_now_utc():
+    return datetime.now(timezone.utc)
+
+def ensure_utc(dt):
+    if not dt: return None
+    if isinstance(dt, str):
+        try: dt = datetime.fromisoformat(dt.replace('Z', '+00:00'))
+        except: return None
+    if not hasattr(dt, 'tzinfo') or dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
 HAS_PARSERS = True
 PARSER_ERRORS = []
 try:
