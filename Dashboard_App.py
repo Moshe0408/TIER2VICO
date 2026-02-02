@@ -487,6 +487,7 @@ class DataEngine:
         
         # Static defaults
         return [
+            {"id": "meetings-forms", "name": "ישיבות שחורר וטפסים", "emoji": "📄", "type": "kb", "subCategories": []},
             {"id": "kb", "name": "מרכז ידע ונהלים", "emoji": "📚", "type": "kb", "subCategories": [
                 {"id": "kb-guides", "name": "מדריכי מערכת"}, {"id": "kb-policy", "name": "נהלי עבודה"}
             ]},
