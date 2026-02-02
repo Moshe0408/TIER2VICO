@@ -496,11 +496,46 @@ class DataEngine:
                         log(f"Merge: Adding local category '{l_cat.get('name')}' to display.")
                         merged[l_cat['id']] = l_cat
                     else:
-                        # Optional: Merge guides if needed? For now, let's assume IDs match means same object.
-                        # If user updated local JSON significantly, we might want to prioritize it?
-                        # Let's keep it simple: If in Firestore, use Firestore. If only in Local, use Local.
                         pass
                 
+                # 4. Load Guides from Firestore and Re-attach
+                try:
+                    guides_ref = list(db.collection('guides').stream())
+                    all_guides = [g.to_dict() for g in guides_ref]
+                    log(f"DataEngine: Loaded {len(all_guides)} guides from Firestore.")
+
+                    for g in all_guides:
+                        cat_id = g.get('Category')
+                        sub_id = g.get('SubCategory')
+                        
+                        if cat_id and cat_id in merged:
+                            cat = merged[cat_id]
+                            
+                            if sub_id:
+                                # Attach to SubCategory
+                                found_sub = False
+                                for sub in cat.get('subCategories', []):
+                                    if str(sub.get('id')) == str(sub_id):
+                                        if 'guides' not in sub: sub['guides'] = []
+                                        # Avoid duplicates if guide is already there (though unlikely given save logic strips)
+                                        if not any(xg['id'] == g['id'] for xg in sub['guides']):
+                                            sub['guides'].append(g)
+                                        found_sub = True
+                                        break
+                                if not found_sub:
+                                    # Fallback: Attach to main cat if sub not found
+                                    if 'guides' not in cat: cat['guides'] = []
+                                    if not any(xg['id'] == g['id'] for xg in cat['guides']):
+                                        cat['guides'].append(g)
+                            else:
+                                # Attach to Main Category
+                                if 'guides' not in cat: cat['guides'] = []
+                                if not any(xg['id'] == g['id'] for xg in cat['guides']):
+                                    cat['guides'].append(g)
+                                    
+                except Exception as e:
+                    err_log(f"Firestore Guides fetch/attach error: {e}")
+
                 return list(merged.values())
 
             except Exception as e: 
