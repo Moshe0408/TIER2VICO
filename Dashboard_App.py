@@ -939,14 +939,14 @@ class handler(http.server.SimpleHTTPRequestHandler):
                 log(f"Handling /api/stats (Trace: {self.headers.get('Cookie')})")
                 try:
                     integrations = DataEngine.get_integrations()
-                    categories = DataEngine.get_guides_categories()
+                    categories = DataEngine.get_guides_categories() or []
                     data = {
-                        "Integrations": integrations,
+                        "Integrations": integrations or [],
                         "GuidesCategories": categories,
                         "CustomerLogos": CUSTOMER_LOGOS,
                         "Health": {
                             "firebase": db is not None,
-                            "count": len(integrations),
+                            "count": len(integrations) if integrations else 0,
                             "vercel": os.environ.get('VERCEL') is not None
                         }
                     }
@@ -954,7 +954,10 @@ class handler(http.server.SimpleHTTPRequestHandler):
                     self.wfile.write(json.dumps(data, default=str).encode('utf-8'))
                 except Exception as e:
                     err_log(f"API Stats Error: {e}")
-                    self.send_error(500, str(e))
+                    # Return 200 with error to prevent frontend crash loop
+                    err_data = {"error": str(e), "Integrations": [], "GuidesCategories": []}
+                    self.send_response(200); self.send_header('Content-Type','application/json'); self.end_headers()
+                    self.wfile.write(json.dumps(err_data).encode('utf-8'))
                 return
 
             if path == '/api/health':
@@ -2387,6 +2390,12 @@ class handler(http.server.SimpleHTTPRequestHandler):
                 }
 
                 const data = await res.json();
+                
+                if (data.error) {
+                    console.error("Backend Error:", data.error);
+                    alert("שגיאת שרת: " + data.error);
+                }
+
                 stats_data = data;
                 
                 if (data.GuidesCategories) {
@@ -2396,6 +2405,13 @@ class handler(http.server.SimpleHTTPRequestHandler):
                 update();
             } catch(e) { 
                 console.error("Poll error:", e);
+                // Try to find a loader if it exists (generic)
+                const l = document.getElementById('loading');
+                if(l) l.style.display = 'none';
+                
+                // Panic Alert to User
+                alert("שגיאת תקשורת: " + e.message); 
+                
                 if (e.message.includes('Unexpected token')) {
                     console.warn("Likely received HTML instead of JSON. Redirecting...");
                     window.location.href = '/login';
