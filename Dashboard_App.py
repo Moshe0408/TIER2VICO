@@ -663,6 +663,7 @@ class DataEngine:
                             batch.commit(); batch = db.batch(); batch_counter = 0;
 
                     # 3. Save Subcategory Guides
+                    subcategories = cat.get('subCategories', [])
                     for sub in subcategories:
                         sub_guides = sub.get('guides', [])
                         for g in sub_guides:
@@ -674,7 +675,12 @@ class DataEngine:
                             batch.set(g_ref, g)
                             batch_counter += 1
                             if batch_counter >= max_batch:
-                                batch.commit(); batch = db.batch(); batch_counter = 0;
+                                try:
+                                    batch.commit()
+                                    batch = db.batch()
+                                    batch_counter = 0
+                                except Exception as e:
+                                    err_log(f"Batch commit error (inner): {e}")
 
                 if batch_counter > 0:
                     batch.commit()
