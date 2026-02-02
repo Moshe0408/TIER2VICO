@@ -461,21 +461,20 @@ class DataEngine:
             if now - ts < DataEngine._CACHE_TTL:
                 return val
 
-        log("DataEngine: Loading integrations...")
-        # 1. Try Firestore (FAST PATH ONLY)
-        if db:
-            try:
-                # Reduced timeout to 3s to ensure we have time for the fallback on Vercel
-                doc = db.collection('data').document('integrations').get(timeout=3)
-                if doc.exists:
-                    raw = doc.to_dict()
-                    data = raw.get('list', []) if isinstance(raw, dict) else raw
-                    if data:
-                        log(f"DataEngine: Loaded {len(data)} from Firestore.")
-                        DataEngine._cache[cache_key] = (now, data)
-                        return data
-            except Exception as e: 
-                err_log(f"Firestore Integrations timeout/error ({e}). Falling back...")
+        log("DataEngine: Loading integrations (FORCED LOCAL FALLBACK)...")
+        # 1. Try Firestore (TEMPORARILY DISABLED TO FIX VERCEL TIMEOUT)
+        # if db:
+        #     try:
+        #         doc = db.collection('data').document('integrations').get(timeout=3)
+        #         if doc.exists:
+        #             raw = doc.to_dict()
+        #             data = raw.get('list', []) if isinstance(raw, dict) else raw
+        #             if data:
+        #                 log(f"DataEngine: Loaded {len(data)} from Firestore.")
+        #                 DataEngine._cache[cache_key] = (now, data)
+        #                 return data
+        #     except Exception as e: 
+        #         err_log(f"Firestore Integrations timeout/error ({e}). Falling back...")
         else:
             log("DataEngine: Firestore missing, using fallback chain.")
 
@@ -515,20 +514,20 @@ class DataEngine:
             if now - ts < DataEngine._CACHE_TTL:
                 return val
 
-        log("DataEngine: Loading categories (Bulletproof Mode)...")
-        if db:
-            # 1. FAST PATH: Consolidated 'kb' document
-            try:
-                kb_doc = db.collection('data').document('kb').get(timeout=3)
-                if kb_doc.exists:
-                    data = kb_doc.to_dict()
-                    cats = data.get('categories') or data.get('list') or []
-                    if cats:
-                        log(f"DataEngine: Loaded {len(cats)} categories from Firestore KB.")
-                        DataEngine._cache[cache_key] = (now, cats)
-                        return cats
-            except Exception as e:
-                err_log(f"Fast-KB Fetch Timeout/Error ({e}). Falling back to local...")
+        log("DataEngine: Loading categories (FORCED LOCAL FALLBACK)...")
+        # if db:
+        #     # 1. FAST PATH: Consolidated 'kb' document
+        #     try:
+        #         kb_doc = db.collection('data').document('kb').get(timeout=3)
+        #         if kb_doc.exists:
+        #             data = kb_doc.to_dict()
+        #             cats = data.get('categories') or data.get('list') or []
+        #             if cats:
+        #                 log(f"DataEngine: Loaded {len(cats)} categories from Firestore KB.")
+        #                 DataEngine._cache[cache_key] = (now, cats)
+        #                 return cats
+        #     except Exception as e:
+        #         err_log(f"Fast-KB Fetch Timeout/Error ({e}). Falling back to local...")
 
         # 2. LOCAL FALLBACK (Very fast, reliable)
         try:
