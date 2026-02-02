@@ -30,6 +30,26 @@ def ensure_utc(dt):
         return dt.replace(tzinfo=timezone.utc)
     return dt.astimezone(timezone.utc)
 
+# Support functions for consolidated data
+def get_stats():
+    try:
+        # Avoid circular dependency by using DataEngine directly
+        integrations = DataEngine.get_integrations() or []
+        categories = DataEngine.get_guides_categories() or []
+        return {
+            "Integrations": integrations,
+            "GuidesCategories": categories,
+            "CustomerLogos": CUSTOMER_LOGOS,
+            "Health": {
+                "firebase": db is not None,
+                "count": len(integrations),
+                "vercel": os.environ.get('VERCEL') is not None
+            }
+        }
+    except Exception as e:
+        err_log(f"get_stats runtime error: {e}")
+        return {"Integrations": [], "GuidesCategories": [], "error": str(e)}
+
 HAS_PARSERS = True
 PARSER_ERRORS = []
 try:
@@ -1443,8 +1463,12 @@ class handler(http.server.SimpleHTTPRequestHandler):
 
     def get_ui(self):
         # Bootstrap data for instant load
-        boot_data = get_stats()
-        boot_json = json.dumps(boot_data, default=str).replace("</", "<\\/") 
+        boot_json = "{}"
+        try:
+            boot_data = get_stats()
+            boot_json = json.dumps(boot_data, default=str).replace("</", "<\\/") 
+        except Exception as e:
+            err_log(f"Bootstrapping failed: {e}")
 
         return r"""
 <!DOCTYPE html>
