@@ -778,15 +778,24 @@ class DataEngine:
                             
                             with open(out_path, "wb") as f:
                                 f.write(content)
+                            
+                            log(f"SAVED IMAGE: {out_path} ({len(content)} bytes)")
+                            return {"src": f"/uploads/{safe_name}"}
+                    except Exception as e:
+                        err_log(f"Mammoth extraction error: {e}")
+                        return {"src": ""}
+                
                 if not HAS_PARSERS or 'python-docx' in PARSER_ERRORS: return "docx parser missing"
-                doc = docx.Document(file_path)
+                
                 html = ""
                 # Use mammoth if available for better HTML with images
                 if 'mammoth' not in PARSER_ERRORS:
                     with open(file_path, "rb") as docx_file:
-                        res = mammoth.convert_to_html(docx_file)
-                        html = res.value
+                        result = mammoth.convert_to_html(docx_file, 
+                            convert_image=mammoth.images.img_element(handle_image))
+                        html = result.value
                 else:
+                    doc = docx.Document(file_path)
                     for para in doc.paragraphs:
                         html += f"<p>{para.text}</p>"
                 return html
