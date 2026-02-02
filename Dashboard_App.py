@@ -1462,14 +1462,6 @@ class handler(http.server.SimpleHTTPRequestHandler):
 
 
     def get_ui(self):
-        # Bootstrap data for instant load
-        boot_json = "{}"
-        try:
-            boot_data = get_stats()
-            boot_json = json.dumps(boot_data, default=str).replace("</", "<\\/") 
-        except Exception as e:
-            err_log(f"Bootstrapping failed: {e}")
-
         return r"""
 <!DOCTYPE html>
 <html lang="he" dir="rtl">
@@ -2038,9 +2030,9 @@ class handler(http.server.SimpleHTTPRequestHandler):
     <script>
         let subSect = 'projects', selectedSubCatId = null;
         
-        // --- BOOTSTRAP & CACHE LOGIC ---
-        let stats_data = {{boot_json}} || { Integrations: [] };
-        let guides_data = stats_data.GuidesCategories || [];
+        // --- CACHE LOGIC ---
+        let stats_data = { Integrations: [] };
+        let guides_data = [];
         
         // Try to recover from localStorage for an even faster "instant" feel
         const cached_stats = localStorage.getItem('vico_stats');
@@ -3583,7 +3575,7 @@ class handler(http.server.SimpleHTTPRequestHandler):
     </script>
 </body>
 </html>
-        """.replace("{{boot_json}}", boot_json)
+        """
 
 if __name__ == "__main__":
     socketserver.TCPServer.allow_reuse_address = True
