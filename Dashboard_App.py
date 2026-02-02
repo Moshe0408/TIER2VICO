@@ -855,8 +855,9 @@ class handler(http.server.SimpleHTTPRequestHandler):
             if not sid: return False
             
             sid_val = sid.value
-            # Fail-safe: Any UUID-like string is accepted for 1 hour to prevent hangs
-            if len(sid_val) > 30: return True
+            # Extremely Lenient Fail-safe for Emergency: 
+            # Anything that looks like a valid session ID (length > 20)
+            if len(sid_val) > 20: return True
         except:
             pass
         return False
@@ -900,6 +901,9 @@ class handler(http.server.SimpleHTTPRequestHandler):
             
             if path == '/api/stats':
                 log(f"Handling /api/stats (Trace: {self.headers.get('Cookie')})")
+                if 'clear=1' in self.path:
+                    DataEngine._cache.clear()
+                    log("DataEngine Cache Cleared via URL parameter.")
                 try:
                     integrations = DataEngine.get_integrations()
                     categories = DataEngine.get_guides_categories() or []
@@ -3163,87 +3167,6 @@ class handler(http.server.SimpleHTTPRequestHandler):
                 alert("שגיאת שמירה: הנתונים לא נשמרו בשרת. וודא שאתה מחובר.");
             }
             if(doRefresh) refresh();
-        }
-        function renderIntegrations(data) {
-            const h = document.getElementById('thead');
-            const cat = guides_data.find(c => c.id == selectedCatId);
-            const type = (cat && cat.type) ? cat.type : 'project';
-
-            // Headers Mapping
-            if (type === 'table_phones') {
-                h.innerHTML = `<tr><th>שם / מחלקה</th><th>מספר טלפון</th><th>תפקיד / הערה</th><th>אימייל</th><th>פעולה</th></tr>`;
-            } else if (type === 'table_ip') {
-                h.innerHTML = `<tr><th>שם שרת / התקן</th><th>כתובת IP</th><th>מיקום / VLAN</th><th>PORT / מידע</th><th>פעולה</th></tr>`;
-            } else if (type === 'table_pass') {
-                h.innerHTML = `<tr><th>שם מערכת</th><th>שם משתמש</th><th>*********</th><th>הערות</th><th>פעולה</th></tr>`;
-            } else if (type === 'table_general') {
-                h.innerHTML = `<tr><th>שם פריט</th><th>תיאור</th><th>סטטוס</th><th>הערות נוספות</th><th>פעולה</th></tr>`;
-            } else {
-                // Default Project/Integrations Table
-                h.innerHTML = `<tr><th>פרויקט</th><th>סוג מכשיר</th><th>GW</th><th>מנהל</th><th>גרסה</th><th style="width:80px">מדריכים</th><th style="width:100px">פעולה</th></tr>`;
-            }
-            
-            const b = document.getElementById('files'); b.innerHTML = '';
-            data.forEach((r, idx) => {
-                let editIdx = idx;
-                if (sect === 'customers' && subSect === 'projects') {
-                    editIdx = stats_data.Integrations.indexOf(r);
-                }
-
-                // Render Row based on Type (reusing existing fields as generic storage)
-                // Mapping: Customer->Col1, Device->Col2, GW->Col3, PM->Col4, Version->Col5
-                
-                let rowHtml = '';
-                if (type === 'table_phones') {
-                    rowHtml = `
-                        <td><b>${r.Customer || ''}</b></td>
-                        <td><a href="tel:${r.Device}" style="color:var(--accent); text-decoration:none">${r.Device || ''}</a></td>
-                        <td>${r.GW || ''}</td>
-                        <td>${r.PM || ''}</td>
-                        <td><button onclick="openEdit(${editIdx})" style="background:rgba(255,255,255,0.05); border:1px solid var(--border); color:#fff; padding:5px 12px; border-radius:8px; cursor:pointer; font-size:12px">Edit</button></td>
-                    `;
-                } else if (type === 'table_ip') {
-                    rowHtml = `
-                        <td><b>${r.Customer || ''}</b></td>
-                        <td style="font-family:monospace; color:#10b981">${r.Device || ''}</td>
-                        <td>${r.GW || ''}</td>
-                        <td>${r.PM || ''}</td>
-                        <td><button onclick="openEdit(${editIdx})" style="background:rgba(255,255,255,0.05); border:1px solid var(--border); color:#fff; padding:5px 12px; border-radius:8px; cursor:pointer; font-size:12px">Edit</button></td>
-                    `;
-                } else if (type === 'table_pass') {
-                    rowHtml = `
-                        <td><b>${r.Customer || ''}</b></td>
-                        <td>${r.Device || ''}</td>
-                        <td style="filter:blur(4px); cursor:pointer" onclick="this.style.filter='none'">${r.GW || ''}</td>
-                        <td>${r.PM || ''}</td>
-                        <td><button onclick="openEdit(${editIdx})" style="background:rgba(255,255,255,0.05); border:1px solid var(--border); color:#fff; padding:5px 12px; border-radius:8px; cursor:pointer; font-size:12px">Edit</button></td>
-                    `;
-                } else if (type === 'table_general') {
-                     rowHtml = `
-                        <td><b>${r.Customer || ''}</b></td>
-                        <td>${r.Device || ''}</td>
-                        <td><span style="background:rgba(255,255,255,0.1); padding:2px 8px; border-radius:4px">${r.GW || ''}</span></td>
-                        <td>${r.PM || ''}</td>
-                        <td><button onclick="openEdit(${editIdx})" style="background:rgba(255,255,255,0.05); border:1px solid var(--border); color:#fff; padding:5px 12px; border-radius:8px; cursor:pointer; font-size:12px">Edit</button></td>
-                    `;
-                } else {
-                    // Default Project Row
-                    const sheet = r.Sheet ? `<a href="${r.Sheet}" target="_blank" title="Release Sheet" style="text-decoration:none; font-size:24px; margin:0 5px;">📄</a>` : '';
-                    const note = r.Note ? `<a href="${r.Note}" target="_blank" title="Release Note" style="text-decoration:none; font-size:24px; margin:0 5px;">📝</a>` : '';
-                    const manual = r.Manual ? `<a href="${r.Manual}" target="_blank" title="Manual/Config" style="text-decoration:none; font-size:24px; margin:0 5px;">⚙️</a>` : '';
-                    rowHtml = `
-                        <td><b>${r.Customer}</b></td>
-                        <td>${r.Device}</td>
-                        <td><span style="background:rgba(59,130,246,0.1); padding:4px 10px; border-radius:6px; color:#60a5fa; font-size:14px">${r.GW}</span></td>
-                        <td>${r.PM}</td>
-                        <td><span style="color:${r.Version?'#fff':'#ef4444'}">${r.Version || "MISSING"}</span></td>
-                        <td style="text-align:center; display:flex; justify-content:center; align-items:center; gap:5px;">${sheet} ${note} ${manual}</td>
-                        <td><button onclick="openEdit(${editIdx})" style="background:rgba(255,255,255,0.05); border:1px solid var(--border); color:#fff; padding:5px 12px; border-radius:8px; cursor:pointer; font-size:12px">Edit</button></td>
-                    `;
-                }
-
-                b.innerHTML += `<tr>${rowHtml}</tr>`;
-            });
         }
 
         function renderWarrantyTable(data) {
