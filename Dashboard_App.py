@@ -469,9 +469,9 @@ class DataEngine:
              # But I'll try to load it first, if it fails, I'll return a static set.
              p = os.path.join(BASE_DIR, "integrations_db.json")
              if os.path.exists(p):
-                 with open(p, 'r', encoding='utf-8') as f:
-                     data = json.load(f)
-                     if isinstance(data, dict): data = data.get('list', [])
+                 with open(p, 'r', encoding='utf-8-sig') as f:
+                     raw = json.load(f)
+                     data = raw.get('list', []) if isinstance(raw, dict) else raw
                      if data: return data
         except: pass
         
@@ -490,22 +490,22 @@ class DataEngine:
                 return val
 
         log("DataEngine: Loading categories (ULTRA-FAST EMERGENCY MODE)...")
+        _err = ""
         try:
              p = os.path.join(BASE_DIR, "guides_db.json")
              if os.path.exists(p):
-                 with open(p, 'r', encoding='utf-8') as f:
-                     data = json.load(f)
-                     if isinstance(data, dict):
-                         cats = data.get('categories') or data.get('list') or []
-                     else:
-                         cats = data # It's a list
+                 with open(p, 'r', encoding='utf-8-sig') as f:
+                     raw = json.load(f)
+                     cats = raw.get('categories') or raw.get('list') or [] if isinstance(raw, dict) else raw
                      if cats: return cats
+             else: _err = "File not found"
         except Exception as e:
+             _err = str(e)
              err_log(f"DataEngine: Error loading guides_db.json: {e}")
         
-        # ULTIMATE STATIC FALLBACK
+        # ULTIMATE DIAGNOSTIC FALLBACK
         return [
-            {"id": "emergency", "name": "System Restoring...", "emoji": "🛠️", "type": "kb", "subCategories": []}
+            {"id": "emergency", "name": f"System Restoring ({_err})", "emoji": "🛠️", "type": "kb", "subCategories": []}
         ]
         
         # 3. STATIC DEFAULT (Ultimate fallback)
