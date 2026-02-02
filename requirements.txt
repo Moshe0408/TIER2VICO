@@ -3,4 +3,3 @@ firebase-admin
 mammoth
 python-docx
 PyPDF2
-PyMuPDF

@@ -471,9 +471,16 @@ class DataEngine:
         log("DataEngine: Loading categories...")
         if db:
             try:
-                # 1. Load from Firestore
-                cats_ref = list(db.collection('guides_categories').stream())
-                firestore_cats = [c.to_dict() for c in cats_ref]
+                # 1. Load from Firestore (with tiny hack for potential hangs)
+                firestore_cats = []
+                try:
+                    # stream() can hang if connection is unstable. 
+                    # We give it a shot but the try block protects us.
+                    cats_ref = list(db.collection('guides_categories').stream())
+                    firestore_cats = [c.to_dict() for c in cats_ref]
+                    log(f"DataEngine: Loaded {len(firestore_cats)} categories from Firestore.")
+                except Exception as ef:
+                    err_log(f"Firestore categories stream error: {ef}")
                 
                 # 2. Load from Local JSON (User's file)
                 local_cats = []
@@ -503,38 +510,33 @@ class DataEngine:
                     guides_ref = list(db.collection('guides').stream())
                     all_guides = [g.to_dict() for g in guides_ref]
                     log(f"DataEngine: Loaded {len(all_guides)} guides from Firestore.")
+                except Exception as eg:
+                    err_log(f"Firestore guides stream error: {eg}")
+                    all_guides = []
 
-                    for g in all_guides:
-                        cat_id = g.get('Category')
-                        sub_id = g.get('SubCategory')
+                for g in all_guides:
+                    cat_id = g.get('Category')
+                    sub_id = g.get('SubCategory')
+                    
+                    if cat_id and cat_id in merged:
+                        cat = merged[cat_id]
                         
-                        if cat_id and cat_id in merged:
-                            cat = merged[cat_id]
-                            
-                            if sub_id:
-                                # Attach to SubCategory
-                                found_sub = False
-                                for sub in cat.get('subCategories', []):
-                                    if str(sub.get('id')) == str(sub_id):
-                                        if 'guides' not in sub: sub['guides'] = []
-                                        # Avoid duplicates if guide is already there (though unlikely given save logic strips)
-                                        if not any(xg['id'] == g['id'] for xg in sub['guides']):
-                                            sub['guides'].append(g)
-                                        found_sub = True
-                                        break
-                                if not found_sub:
-                                    # Fallback: Attach to main cat if sub not found
-                                    if 'guides' not in cat: cat['guides'] = []
-                                    if not any(xg['id'] == g['id'] for xg in cat['guides']):
-                                        cat['guides'].append(g)
-                            else:
-                                # Attach to Main Category
+                        if sub_id:
+                            # Attach to SubCategory
+                            found_sub = False
+                            for sub in cat.get('subCategories', []):
+                                if str(sub.get('id')) == str(sub_id):
+                                    if 'guides' not in sub: sub['guides'] = []
+                                    sub['guides'].append(g)
+                                    found_sub = True
+                                    break
+                            if not found_sub:
                                 if 'guides' not in cat: cat['guides'] = []
-                                if not any(xg['id'] == g['id'] for xg in cat['guides']):
-                                    cat['guides'].append(g)
-                                    
-                except Exception as e:
-                    err_log(f"Firestore Guides fetch/attach error: {e}")
+                                cat['guides'].append(g)
+                        else:
+                            if 'guides' not in cat: cat['guides'] = []
+                            cat['guides'].append(g)
+
 
                 return list(merged.values())
 
@@ -1456,7 +1458,7 @@ class handler(http.server.SimpleHTTPRequestHandler):
 <html lang="he" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <title>Tier 2 Vico | Intelligence Dashboard</title>
+    <title>Vico Intelligence (Live Mode)</title>
     <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
     
     <!-- Firebase SDK -->
@@ -1478,7 +1480,14 @@ class handler(http.server.SimpleHTTPRequestHandler):
         const app = initializeApp(firebaseConfig);
         window.db = getFirestore(app);
         window.storage = getStorage(app);
+        console.log("Firebase initialized in UI");
         window.firebaseRefs = { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, setDoc, ref, uploadBytes, getDownloadURL };
+    </script>
+    <script>
+        console.log("UI HTML Loaded - Starting JS...");
+        window.addEventListener('error', function(e) {
+            console.error("Global JS Error:", e.message, "at", e.filename, ":", e.lineno);
+        });
     </script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800;900&display=swap');
@@ -2016,6 +2025,7 @@ class handler(http.server.SimpleHTTPRequestHandler):
         let selectedGuideId = null;
 
         async function init() {
+            console.log("init() started");
             // Check System Health
             fetch('/api/health').then(r => r.json()).then(h => {
                 const fb = document.getElementById('h-firebase');
@@ -2357,8 +2367,10 @@ class handler(http.server.SimpleHTTPRequestHandler):
         }
 
         async function refresh() {
+            console.log("Refreshing data...");
             try {
                 const res = await fetch('/api/stats');
+                console.log("Stats API response received:", res.status);
                 if (!res.ok) {
                     if (res.status === 401 || res.status === 403) {
                         window.location.href = '/login';
