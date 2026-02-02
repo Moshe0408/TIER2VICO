@@ -634,32 +634,47 @@ class DataEngine:
                     cat['id'] = cid # Ensure ID is set
                     
                     # 1. Prepare Category Doc (Excluding large children)
-                    cat_doc = {k:v for k,v in cat.items() if k not in ['guides', 'subCategories']}
-                    # Convert subCategories to lightweight list if needed, or save separately.
-                    # For now, we'll keep subCategories in the doc IF they are small, but ideally separate.
-                    # Let's keep subCategories in the doc for simplicity as they are usually structure.
-                    cat_doc['subCategories'] = cat.get('subCategories', [])
+                    # We remove 'guides' but KEEP 'subCategories' structure (without guides inside them ideally, but complexity...)
+                    # To do this cleanly: WE MUST strip guides from subCategories in the doc, and save them separately.
                     
+                    cat_doc = {k:v for k,v in cat.items() if k not in ['guides']}
+                    # Deep copy subcategories to strip guides for the doc
+                    clean_subcats = []
+                    subcategories = cat.get('subCategories', [])
+                    for sub in subcategories:
+                         sub_copy = {k:v for k,v in sub.items() if k != 'guides'}
+                         clean_subcats.append(sub_copy)
+                    cat_doc['subCategories'] = clean_subcats
+
                     doc_ref = db.collection('guides_categories').document(cid)
                     batch.set(doc_ref, cat_doc)
                     batch_counter += 1
                     
-                    # 2. Save Guides to 'guides' collection
+                    # 2. Save Direct Guides
                     guides = cat.get('guides', [])
                     for g in guides:
                         gid = g.get('id') or str(uuid.uuid4())
                         g['id'] = gid
                         g['Category'] = cid # Link to parent
-                        # Remove potentially heavy nested images from index if needed, but we keep for now
-                        
                         g_ref = db.collection('guides').document(gid)
                         batch.set(g_ref, g)
                         batch_counter += 1
-                        
                         if batch_counter >= max_batch:
-                            batch.commit()
-                            batch = db.batch()
-                            batch_counter = 0
+                            batch.commit(); batch = db.batch(); batch_counter = 0;
+
+                    # 3. Save Subcategory Guides
+                    for sub in subcategories:
+                        sub_guides = sub.get('guides', [])
+                        for g in sub_guides:
+                            gid = g.get('id') or str(uuid.uuid4())
+                            g['id'] = gid
+                            g['Category'] = cid # Link to main parent category
+                            g['SubCategory'] = sub.get('id') # Link to subcategory
+                            g_ref = db.collection('guides').document(gid)
+                            batch.set(g_ref, g)
+                            batch_counter += 1
+                            if batch_counter >= max_batch:
+                                batch.commit(); batch = db.batch(); batch_counter = 0;
 
                 if batch_counter > 0:
                     batch.commit()
