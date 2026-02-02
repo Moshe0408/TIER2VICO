@@ -49,49 +49,9 @@ try:
 except ImportError:
     HAS_FIREBASE = False
 
-# Google Drive API
-try:
-    from google.oauth2 import service_account
-    from googleapiclient.discovery import build
-    from googleapiclient.http import MediaFileUpload, MediaIoBaseUpload
-    import io
-    HAS_GDRIVE = True
-    
-    # Initialize Google Drive
-    GDRIVE_CREDS_FILE = os.path.join(os.path.dirname(__file__), 'google-drive-credentials.json')
-    GDRIVE_FOLDER_ID = "13jBR4dJOhojtf63_mGYLeoAqiqP7KjJs"  # Dashboard-Uploads folder
-    
-    # Try to load credentials from environment variable first (for Vercel)
-    gdrive_creds_str = os.environ.get('GOOGLE_DRIVE_CREDENTIALS')
-    if gdrive_creds_str:
-        try:
-            # Handle potential escaped newlines or quotes from env vars
-            if isinstance(gdrive_creds_str, str):
-                gdrive_creds_str = gdrive_creds_str.replace('\\n', '\n')
-            
-            creds_data = json.loads(gdrive_creds_str)
-            GDRIVE_CREDS = service_account.Credentials.from_service_account_info(
-                creds_data,
-                scopes=['https://www.googleapis.com/auth/drive.file']
-            )
-            GDRIVE_SERVICE = build('drive', 'v3', credentials=GDRIVE_CREDS)
-            log("Google Drive API initialized successfully from Environment Variable")
-        except Exception as e_env:
-            log(f"Failed to parse GOOGLE_DRIVE_CREDENTIALS env var: {e_env}")
-            HAS_GDRIVE = False
-    elif os.path.exists(GDRIVE_CREDS_FILE):
-        GDRIVE_CREDS = service_account.Credentials.from_service_account_file(
-            GDRIVE_CREDS_FILE,
-            scopes=['https://www.googleapis.com/auth/drive.file']
-        )
-        GDRIVE_SERVICE = build('drive', 'v3', credentials=GDRIVE_CREDS)
-        log("Google Drive API initialized from credentials file")
-    else:
-        HAS_GDRIVE = False
-        log("Google Drive credentials not found (neither env var nor file)")
-except Exception as e:
-    HAS_GDRIVE = False
-    log(f"Google Drive API Init Critical Error: {e}")
+# Google Drive API - REMOVED PER USER REQUEST
+HAS_GDRIVE = False
+GDRIVE_SERVICE = None
 
 # --- FIREBASE SETUP ---
 db = None # Firestore Client
@@ -639,67 +599,7 @@ class DataEngine:
 
     @staticmethod
     def sync_gdrive_to_kb():
-        log("DataEngine: Manual GDrive sync triggered...")
-        if not HAS_GDRIVE or not GDRIVE_SERVICE:
-            log("Sync failed: GDrive not initialized")
-            return False, "Google Drive API not initialized"
-        
-        try:
-            # 1. Load existing categories
-            existing_cats = {}
-            if db:
-                docs = db.collection('guides_categories').stream()
-                for doc in docs:
-                    d = doc.to_dict()
-                    existing_cats[d['name']] = d['id']
-            
-            # 2. Get GDrive files
-            files = []
-            query = f"'{GDRIVE_FOLDER_ID}' in parents and trashed = false"
-            results = GDRIVE_SERVICE.files().list(q=query, fields="files(id, name, mimeType, webViewLink)").execute()
-            root_items = results.get('files', [])
-            
-            for item in root_items:
-                name = item['name']
-                fid = item['id']
-                mime = item['mimeType']
-                
-                if mime == 'application/vnd.google-apps.folder':
-                    cat_id = existing_cats.get(name)
-                    if not cat_id:
-                        cat_id = str(uuid.uuid4())
-                        if db:
-                            db.collection('guides_categories').document(cat_id).set({
-                                "id": cat_id, "name": name, "emoji": "📂", "type": "kb", "guides": [], "subCategories": []
-                            })
-                    
-                    # Sync files in this folder
-                    sub_q = f"'{fid}' in parents and trashed = false"
-                    sub_res = GDRIVE_SERVICE.files().list(q=sub_q, fields="files(id, name, mimeType, webViewLink)").execute()
-                    for f in sub_res.get('files', []):
-                        if f['mimeType'] != 'application/vnd.google-apps.folder':
-                            # Save as guide
-                            gid = str(uuid.uuid5(uuid.NAMESPACE_DNS, f['name'] + cat_id))
-                            if db:
-                                db.collection('guides').document(gid).set({
-                                    "id": gid, "title": f['name'], "Category": cat_id, "type": "file",
-                                    "content": f"קובץ מגוגל דרייב: {f['name']}\n\nקישור לצפייה: {f['webViewLink']}",
-                                    "url": f['webViewLink'], "gdrive_id": f['id']
-                                }, merge=True)
-                else:
-                    # Root file -> General
-                    cat_id = existing_cats.get("כללי") or "general"
-                    gid = str(uuid.uuid5(uuid.NAMESPACE_DNS, item['name'] + cat_id))
-                    if db:
-                        db.collection('guides').document(gid).set({
-                            "id": gid, "title": item['name'], "Category": cat_id, "type": "file",
-                            "content": f"קובץ מגוגל דרייב: {item['name']}\n\nקישור לצפייה: {item['webViewLink']}",
-                            "url": item['webViewLink'], "gdrive_id": item['id']
-                        }, merge=True)
-            return True, "Sync complete"
-        except Exception as e:
-            err_log(f"GDrive manual sync failed: {e}")
-            return False, str(e)
+        return False, "Google Drive integration has been removed."
 
     @staticmethod
     def extract_text_from_file(file_path):
@@ -895,7 +795,7 @@ class handler(http.server.SimpleHTTPRequestHandler):
             if path == '/api/health':
                 health = {
                     "firebase": db is not None,
-                    "gdrive": (HAS_GDRIVE and GDRIVE_SERVICE is not None),
+                    "gdrive": False,
                     "parsers": HAS_PARSERS,
                     "vercel": os.environ.get('VERCEL') is not None,
                     "now": get_now_utc().isoformat()
@@ -1068,43 +968,8 @@ class handler(http.server.SimpleHTTPRequestHandler):
                                 file_content = file_content[:-1]
                             
                             # Upload to Google Drive if available, otherwise save locally
-                            if HAS_GDRIVE:
-                                try:
-                                    from googleapiclient.http import MediaIoBaseUpload
-                                    import io
-                                    
-                                    file_metadata = {
-                                        'name': safe_name,
-                                        'parents': [GDRIVE_FOLDER_ID]
-                                    }
-                                    media = MediaIoBaseUpload(
-                                        io.BytesIO(file_content),
-                                        mimetype='application/octet-stream',
-                                        resumable=True
-                                    )
-                                    
-                                    file = GDRIVE_SERVICE.files().create(
-                                        body=file_metadata,
-                                        media_body=media,
-                                        fields='id, webViewLink, webContentLink'
-                                    ).execute()
-                                    
-                                    # Make file publicly accessible
-                                    GDRIVE_SERVICE.permissions().create(
-                                        fileId=file['id'],
-                                        body={'type': 'anyone', 'role': 'reader'}
-                                    ).execute()
-                                    
-                                    # Generate direct download link
-                                    download_url = f"https://drive.google.com/uc?export=download&id={file['id']}"
-                                    
-                                    log(f"SUCCESS: Uploaded {filename} to Google Drive as {safe_name}")
-                                    self.send_response(200); self.send_header('Content-Type','application/json'); self.end_headers()
-                                    self.wfile.write(json.dumps({"url": download_url, "name": filename, "gdrive_id": file['id']}).encode())
-                                    return
-                                except Exception as e:
-                                    err_log(f"Google Drive upload failed: {e}")
-                                    # Fall through to local storage if fail
+                            # Google Drive upload removed.
+                            pass
                             
                             # Fallback: Save locally
                             try:
@@ -1146,13 +1011,7 @@ class handler(http.server.SimpleHTTPRequestHandler):
                 return
 
             if self.path == '/api/gdrive/sync':
-                success, msg = DataEngine.sync_gdrive_to_kb()
-                if success:
-                    self.send_response(200); self.send_header('Content-Type', 'application/json'); self.end_headers()
-                    self.wfile.write(json.dumps({"status":"ok"}).encode('utf-8'))
-                else:
-                    self.send_response(500); self.send_header('Content-Type', 'application/json'); self.end_headers()
-                    self.wfile.write(json.dumps({"status":"error", "message": msg}).encode('utf-8'))
+                self.send_error(501, "Google Drive integration removed.")
                 return
 
             if self.path == '/api/extract-content':
@@ -1685,7 +1544,7 @@ class handler(http.server.SimpleHTTPRequestHandler):
             <div class="clock-box" id="live-clock" style="font-size:14px;">--:--:--</div>
             <div id="health-check" style="display:flex; gap:10px; font-size:12px; margin-right:15px; border-right:1px solid var(--border); padding-right:15px;">
                 <div id="h-firebase" title="Firestore Connection" style="display:flex; align-items:center; gap:5px; color:var(--dim)"><span style="width:8px; height:8px; border-radius:50%; background:#666"></span> DB</div>
-                <div id="h-gdrive" title="Google Drive Storage" style="display:flex; align-items:center; gap:5px; color:var(--dim)"><span style="width:8px; height:8px; border-radius:50%; background:#666"></span> DRIVE</div>
+
             </div>
         </div>
         <div class="nav-links" id="main-nav" style="flex:3; justify-content:center; gap:12px">
@@ -1694,7 +1553,7 @@ class handler(http.server.SimpleHTTPRequestHandler):
         </div>
         <div style="display:flex; gap:15px; align-items:center;">
             <button onclick="openAddGuide()" title="יצירת מדריך חדש" style="background:#8b5cf6; color:#fff; border:none; padding:8px 15px; border-radius:12px; font-size:13px; cursor:pointer; display:flex; align-items:center; gap:8px;">📝 מדריך חדש</button>
-            <button onclick="syncGDrive()" title="סנכרון תקיות מגוגל דרייב" style="background:rgba(59,130,246,0.2); color:#60a5fa; border:1px solid rgba(59,130,246,0.3); padding:8px 15px; border-radius:12px; font-size:13px; cursor:pointer; display:flex; align-items:center; gap:8px;">🔄 סנכרון דרייב</button>
+
             <button onclick="openAddCat()" title="הוספת קטגוריה" style="background:var(--primary); color:#fff; border:none; padding:8px 15px; border-radius:12px; font-size:13px; cursor:pointer; transition:0.3s; display:flex; align-items:center; gap:8px;">📁 קטגוריה חדשה</button>
             <button onclick="takeShot()" style="background:#10b981; color:#fff; border:none; padding:10px 20px; border-radius:12px; font-weight:900; cursor:pointer; box-shadow:0 0 20px rgba(16,185,129,0.3)">📸</button>
         </div>
@@ -1965,11 +1824,7 @@ class handler(http.server.SimpleHTTPRequestHandler):
                     fb.style.color = h.firebase ? 'var(--accent)' : '#ef4444';
                     fb.querySelector('span').style.background = h.firebase ? 'var(--accent)' : '#ef4444';
                 }
-                const gd = document.getElementById('h-gdrive');
-                if(gd) {
-                    gd.style.color = h.gdrive ? 'var(--accent)' : '#ef4444';
-                    gd.querySelector('span').style.background = h.gdrive ? 'var(--accent)' : '#ef4444';
-                }
+                // GDrive health check removed
             }).catch(e => console.warn("Health check failed", e));
 
             const clock = document.getElementById('live-clock');
@@ -2236,27 +2091,8 @@ class handler(http.server.SimpleHTTPRequestHandler):
         }
 
         async function syncGDrive() {
-            const btn = event.target;
-            const oldHtml = btn.innerHTML;
-            btn.innerHTML = '<span class="spin">⏳</span> מסנכרן...';
-            btn.disabled = true;
-            
-            try {
-                const resp = await fetch('/api/gdrive/sync', { method: 'POST' });
-                const data = await resp.json();
-                if(data.status === 'ok') {
-                    alert("סנכרון מגוגל דרייב הושלם בהצלחה! הקטגוריות והקבצים עודכנו.");
-                    await refresh();
-                } else {
-                    throw new Error(data.message || "Sync failed");
-                }
-            } catch(e) {
-                console.error("GDrive Sync error:", e);
-                alert("שגיאת סנכרון: " + e.message);
-            } finally {
-                btn.innerHTML = oldHtml;
-                btn.disabled = false;
-            }
+             console.log("GDrive sync removed.");
+             alert("Google Drive integration has been removed.");
         }
 
         async function refresh() {
@@ -2656,7 +2492,7 @@ class handler(http.server.SimpleHTTPRequestHandler):
             
             // Check if we have any categories
             if (!guides_data || guides_data.length === 0) {
-                alert("אנא צור קטגוריה חדשה או סנכרן מהדרייב לפני יצירת מדריך.");
+                alert("אנא צור קטגוריה חדשה לפני יצירת מדריך.");
                 return;
             }
 
