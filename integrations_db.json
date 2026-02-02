@@ -204,7 +204,8 @@
         "PM": "Hila Gitter",
         "Version": "3.7.7.0002",
         "GW": "APG",
-        "Integrator": "Gal Shalev"
+        "Integrator": "Gal Shalev",
+        "Manual": ""
     },
     {
         "Device": "P400",

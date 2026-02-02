@@ -22,7 +22,6 @@ import tempfile
 API_KEY = "a0bb0de4-2193-41c6-bff6-2f87344953ea"
 API_SECRET = "ZWHRKYQNdHsX3HuoK27Xk6omQchnieko28iadd3qxTyxAVKMu1K54jLVsFNoa3nsJC1Ea4ajfg6zsAcIbQOit36B2urQCpGd4K6nkPeJmtixYSoP6ZMwTmCgWgQiVnLt"
 EMAIL_FROM = "MosheI1@VERIFONE.com"
-EMAIL_FROM = "MosheI1@VERIFONE.com"
 EMAIL_TO = "liorb5@verifone.com; danv1@verifone.com; niv.arieli@verifone.com; moshei1@verifone.com"
 EMAIL_CC = "jonas.maman@verifone.com; nadav.lieber@verifone.com"
 
@@ -391,6 +390,7 @@ def fetch_from_outlook(target_date, subfolder_name, file_prefix):
                             return save_path
             except: continue
         
+
         print(f"   [!] לא נמצא קובץ בתיקייה {subfolder_name}.")
         return None
     except Exception as e:
@@ -408,7 +408,7 @@ def process_duration(dur_str):
         return 0
     except: return 0
 
-def analyze_verint_csv(file_path, start_date, is_survey=False):
+def analyze_verint_csv(file_path, start_date, is_survey=False, end_date=None):
     print(f"\n[*] מנתח קובץ {'סקרים' if is_survey else 'שיחות'}: {os.path.basename(file_path)}")
     temp_file = None
     try:
@@ -493,7 +493,7 @@ def analyze_verint_csv(file_path, start_date, is_survey=False):
     else:
         df['Duration_Sec'] = 0
 
-    # Date Filtering (Robust)
+    # Date Filtering (Robust) - Range Support
     time_col = None
     for col in ['Start Time', 'DATE', 'Date', 'TIMESTAMP MILLISECOND', 'TIME']:
         if col in df.columns: time_col = col; break
@@ -501,12 +501,21 @@ def analyze_verint_csv(file_path, start_date, is_survey=False):
     if time_col:
         try:
             df[time_col] = pd.to_datetime(df[time_col], errors='coerce')
-            df_filtered = df[df[time_col].dt.date == start_date.date()]
+            
+            if end_date:
+                # Filter by range
+                df_filtered = df[(df[time_col].dt.date >= start_date.date()) & (df[time_col].dt.date <= end_date.date())]
+            else:
+                # Filter by single date
+                df_filtered = df[df[time_col].dt.date == start_date.date()]
+                
             if not df_filtered.empty:
                 df = df_filtered
+                print(f"   [V] סונן לתאריכים: {start_date.date()} - {end_date.date() if end_date else start_date.date()}. שורות: {len(df)}")
             else:
-                print(f"   [!] אזהרה: לא נמצאו שורות לתאריך {start_date.date()}, משתמש בכל הדוח.")
-        except: pass
+                print(f"   [!] אזהרה: לא נמצאו שורות בטווח התאריכים, משתמש בכל הדוח ({len(df)} שורות).")
+        except Exception as ex: 
+            print(f"   [!] Date filter error: {ex}")
 
     # Categorization based on ANI/DNIS (from analyze_calls.py parameters)
     ani_col = next((c for c in df.columns if 'ANI' in c or 'DIALED FROM' in c), None)
@@ -529,14 +538,42 @@ def analyze_verint_csv(file_path, start_date, is_survey=False):
         tier1 = len(df[df[dnis_col].str.endswith('39029740', na=False)])
         vert = len(df[df[dnis_col].str.endswith('732069574', na=False)])
         shuf = len(df[df[dnis_col].str.endswith('732069576', na=False)])
+        
+        # New Categories Coverage
+        vico_out = len(df[df[dnis_col].astype(str).str.contains('97235264646', na=False)])
+        vico += vico_out
+        
     else:
         # Fallback to campaign mapping
         campaign_col = next((c for c in df.columns if 'CAMPAIGN' in c), None)
         if campaign_col:
             vico = len(df[df[campaign_col].astype(str).str.contains('VICO', na=False, case=False)])
+            
+            # Analiza -> Tier 1
+            tier1_analiza = len(df[df[campaign_col].astype(str).str.contains('Analiza', na=False, case=False)])
+            
             vert = len(df[df[campaign_col].astype(str).str.contains('Verticals', na=False, case=False)])
             shuf = len(df[df[campaign_col].astype(str).str.contains('Shufersal', na=False, case=False)])
-            tier1 = len(df) - (vico + vert + shuf)
+            
+            # Simple Tier 1 deduction
+            tier1 = len(df) - (vico + vert + shuf) 
+            # If Analiza was not counted in vico/vert/shuf, it falls into remaining, 
+            # but let's be explicit if needed. Since Tier 1 is "Rest", Analiza is automatically in Tier 1.
+            # No double counting adjustment needed unless Analiza matches VICO as well.
+            # VICO filter matches "VICO", so "IL_TLV_VICO_Analiza" MIGHT be counted as VICO.
+            # Fix: exclude Analiza from VICO
+            
+            # Re-calculating strict
+            is_vico = df[campaign_col].astype(str).str.contains('VICO', na=False, case=False)
+            is_analiza = df[campaign_col].astype(str).str.contains('Analiza', na=False, case=False)
+            is_shuf = df[campaign_col].astype(str).str.contains('Shufersal', na=False, case=False)
+            is_vert = df[campaign_col].astype(str).str.contains('Verticals', na=False, case=False)
+            
+            vico = len(df[is_vico & ~is_analiza]) # VICO excluding Analiza
+            shuf = len(df[is_shuf])
+            vert = len(df[is_vert])
+            tier1 = len(df) - (vico + shuf + vert) # Everything else (inc. Analiza)
+
 
     # Hourly Distribution
     hourly_calls = {h: 0 for h in range(24)}
@@ -760,10 +797,14 @@ def plot_aht_trend_b64(hourly_data):
     return _save_fig_to_b64(fig)
 
 # ===== Star Agent & Top 3 Logic =====
-def calculate_star_agent(tickets_agents, verint_stats, survey_stats=None):
+def calculate_star_agent(tickets_agents, verint_stats, survey_stats=None, work_days=1):
     """Calculate combined score with weighted formula: 40% Volume, 30% SLA, 20% FCR, 10% CSAT"""
     combined = {}
     survey_stats = survey_stats or {}
+    
+    # Target Volume Scaling (50 tickets per day)
+    target_volume = 50 * max(1, work_days)
+
     
     def normalize_for_match(name):
         return "".join(c for c in str(name).lower() if c.isalpha())
@@ -808,8 +849,10 @@ def calculate_star_agent(tickets_agents, verint_stats, survey_stats=None):
         else:
             stats["Survey"] = s_data
         
+        
         # Scoring components (Scaled 0-100)
-        vol_score = min((stats["Tickets"] + stats["Calls"]) / 50.0 * 100, 100) # Target 50 tasks
+        # Dynamic Volume Score based on Target
+        vol_score = min((stats["Tickets"] + stats["Calls"]) / float(target_volume) * 100, 100) 
         sla_score = stats["SLA"]
         fcr_score = stats["FCR"]
         csat_score = (stats["Survey"] / 5.0 * 100) if stats["Survey"] else 0
@@ -822,15 +865,15 @@ def calculate_star_agent(tickets_agents, verint_stats, survey_stats=None):
     sorted_agents = sorted(combined.values(), key=lambda x: x["Score"], reverse=True)
     return sorted_agents
 
-def build_star_agent_html(sorted_agents):
+def build_star_agent_html(sorted_agents, title_period="היום"):
     if not sorted_agents: return ""
     star = sorted_agents[0]
     return f"""
     <div style="background: linear-gradient(135deg, #FFD700 0%, #FDB931 100%); color: #ffffff; padding: 25px; border-radius: 16px; margin-bottom: 25px; text-align: center; box-shadow: 0 8px 20px rgba(255, 215, 0, 0.4);">
-        <div style="font-size: 28px; font-weight: bold; text-shadow: 2px 2px 4px rgba(0,0,0,0.3); margin-bottom: 15px;">⭐ כוכב/ת היום ⭐</div>
+        <div style="font-size: 28px; font-weight: bold; text-shadow: 2px 2px 4px rgba(0,0,0,0.3); margin-bottom: 15px;">⭐ כוכב/ת {title_period} ⭐</div>
         <div style="font-size: 42px; font-weight: 900; margin: 15px 0; text-shadow: 3px 3px 6px rgba(0,0,0,0.4);">{star['Name']}</div>
         <div style="font-size: 18px; background: rgba(255,255,255,0.25); display: inline-block; padding: 12px 25px; border-radius: 25px; font-weight: bold; margin-top: 10px;">
-            🏆 סה"כ {star['TotalActivity']} משימות ליום העבודה! (מיילים: {star['Tickets']}, שיחות: {star['Calls']})
+            🏆 סה"כ {star['TotalActivity']} משימות ל{title_period} העבודה! (מיילים: {star['Tickets']}, שיחות: {star['Calls']})
         </div>
     </div>
     """
@@ -996,7 +1039,15 @@ def build_full_html(agents_metrics, tags, verint_stats, survey_stats, images, da
     """
     Redesigned HTML report with advanced analytics, gamification and TRENDS.
     """
-    star_agent_html = build_star_agent_html(agents_metrics)
+    # Determine title period (Today vs Month)
+    title_period = "החודש" if len(date_str) > 5 else "היום" # Simple heuristic: '01/2026' vs '01/02/2026' or just check if it was called monthly. 
+    # Better: check context. But date_str is format. Let's use heuristics or pass it.
+    # Actually, subject_prefix is better but not passed here.
+    # Let's check date string length. Month is MM/YYYY (7 chars). Day is DD/MM/YYYY (10 chars).
+    if len(date_str) < 9: 
+         title_period = "החודש"
+    
+    star_agent_html = build_star_agent_html(agents_metrics, title_period)
     top3_html = build_top3_html(agents_metrics)
     
     total_calls = verint_stats['total_calls'] if verint_stats else 0
@@ -1271,11 +1322,17 @@ def generate_and_send_report(start_date, end_date, subject_prefix, report_displa
             print(f"   [!] Glassix Error: {e}")
 
     # Fetch Verint (Calls)
-    calls_csv = fetch_from_outlook(start_date, "Call Log_VICO", "Verint_Calls")
-    survey_xlsx = fetch_from_outlook(start_date, "Survey", "Verint_Survey")
+    if "חודשי" in subject_prefix:
+        # Use specific monthly folders under Five9
+        calls_csv = fetch_from_outlook(start_date, "Log_VICO_Monthly", "Verint_Calls_Monthly")
+        survey_xlsx = fetch_from_outlook(start_date, "Scheduled Report: Survey Result_new_MONTHLY", "Verint_Survey_Monthly")
+    else:
+        calls_csv = fetch_from_outlook(start_date, "Call Log_VICO", "Verint_Calls")
+        survey_xlsx = fetch_from_outlook(start_date, "Survey", "Verint_Survey")
+
 
     if calls_csv:
-        verint_stats = analyze_verint_csv(calls_csv, start_date)
+        verint_stats = analyze_verint_csv(calls_csv, start_date, is_survey=False, end_date=end_date)
         if verint_stats:
             print(f"   [V] Verint: {verint_stats['total_calls']} שיחות נותחו.")
             # Archive Calls
@@ -1285,7 +1342,7 @@ def generate_and_send_report(start_date, end_date, subject_prefix, report_displa
             shutil.copy2(calls_csv, os.path.join(TIER2_DIR, c_filename))
 
     if survey_xlsx:
-        survey_stats = analyze_verint_csv(survey_xlsx, start_date, is_survey=True)
+        survey_stats = analyze_verint_csv(survey_xlsx, start_date, is_survey=True, end_date=end_date)
 
     # --- Trend calculation (Yesterday) ---
     if trends_enabled and subject_prefix == "דוח יומי":
@@ -1315,7 +1372,8 @@ def generate_and_send_report(start_date, end_date, subject_prefix, report_displa
 
     # 3. Processing Star Agent & Top 3
     print("\n[Step 3] Calculating Performance Gamification...")
-    sorted_agents = calculate_star_agent(tickets_info["agents"], verint_stats)
+    sorted_agents = calculate_star_agent(tickets_info["agents"], verint_stats, survey_stats, work_days=total_work_days)
+    
 
     # 4. Generating Graphs
     print("\n[Step 4] Generating Advanced Visualizations...")
