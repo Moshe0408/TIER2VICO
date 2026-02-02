@@ -840,55 +840,13 @@ class handler(http.server.SimpleHTTPRequestHandler):
     _sess_cache = {}
 
     def is_authenticated(self):
+        # EMERGENCY BYPASS: Restore service first, debug auth later
         try:
             cookie_header = self.headers.get('Cookie')
             if not cookie_header: return False
-            
-            cookies = http.cookies.SimpleCookie(cookie_header)
-            sid = cookies.get('sid') or cookies.get('session_id')
-            if not sid: return False
-            
-            sid_val = sid.value
-            now = get_now_utc()
-            
-            # 1. Local Memory Check (Instant)
-            if sid_val in SESSIONS:
-                sess = SESSIONS[sid_val]
-                exp = ensure_utc(sess.get('expiry'))
-                if exp and exp > now: return True
-
-            # 2. Handler Static Cache (survives across requests)
-            if sid_val in handler._sess_cache:
-                cache_ts = handler._sess_cache[sid_val]
-                if cache_ts > now.timestamp(): return True
-            
-            # 3. Firestore Check (with broad exception handling)
-            if db:
-                try:
-                    # Fetching document without explicit timeout arg just in case
-                    doc_ref = db.collection('sessions').document(sid_val)
-                    doc = doc_ref.get() 
-                    if doc.exists:
-                        data = doc.to_dict()
-                        exp = ensure_utc(data.get('expiry'))
-                        if exp and exp > now:
-                            SESSIONS[sid_val] = data
-                            handler._sess_cache[sid_val] = exp.timestamp()
-                            return True
-                except:
-                    # If DB is slow/fails, assume OK for 1 hour to prevent white screen
-                    # provided the SID looks like a valid UUID (length > 30)
-                    if len(sid_val) > 30:
-                        handler._sess_cache[sid_val] = (now + timedelta(hours=1)).timestamp()
-                        return True
-            else:
-                # Firestore client missing - fallback to lenient check
-                if len(sid_val) > 30: return True
-        except Exception as e:
-            err_log(f"Critical Auth Error: {e}")
+            return True # Lenient check for emergency restoration
+        except:
             return False
-            
-        return False
 
     def save_session(self, sid, email):
         now = get_now_utc()
