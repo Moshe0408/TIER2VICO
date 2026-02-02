@@ -2858,17 +2858,13 @@ class handler(http.server.SimpleHTTPRequestHandler):
 
         function renderWarrantyTable(data) {
             const h = document.getElementById('thead');
-            h.innerHTML = `<tr><th>לקוח</th><th>אחריות</th><th>משך</th><th>מענה שירות</th><th>כיסוי</th><th>SLA</th></tr>`;
+            h.innerHTML = `<tr><th>לקוח</th><th>אחריות</th><th>משך</th><th>כיסוי</th></tr>`;
             
             const b = document.getElementById('files'); b.innerHTML = '';
             
-            // Deduplication: Only show if NOT in main projects list or if specifically requested
-            // Or more simply: filter out those where basic project info is essentially the same as warranty info
-            // User requested: "מי שבטבלה הראשונה תסיר מתוך הלקוחות עם שירות"
             const projectCustomers = new Set(stats_data.Integrations.map(x => x.Customer));
 
             data.forEach((r) => {
-                // If it's a "standard" project with no interesting warranty info, skip to reduce clutter
                 const hasWarrantyInfo = r.WarrantyStatus && r.WarrantyStatus !== 'n/a' && r.WarrantyStatus !== 'אין';
                 if (!hasWarrantyInfo && projectCustomers.has(r.Customer)) return;
 
@@ -2877,9 +2873,7 @@ class handler(http.server.SimpleHTTPRequestHandler):
                     <td><b>${r.Customer}</b></td>
                     <td style="font-size:13px">${status}</td>
                     <td style="font-size:12px">${r.WarrantyDuration || '-'}</td>
-                    <td style="font-size:12px">${r.ServiceResponse || '-'}</td>
                     <td style="font-size:12px; max-width:200px">${r.WarrantyCoverage || '-'}</td>
-                    <td style="font-size:12px">${r.SLA || '-'}</td>
                 </tr>`;
             });
         }
