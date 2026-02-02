@@ -495,9 +495,13 @@ class DataEngine:
              if os.path.exists(p):
                  with open(p, 'r', encoding='utf-8') as f:
                      data = json.load(f)
-                     cats = data.get('categories') or data.get('list') or data if isinstance(data, dict) else data
+                     if isinstance(data, dict):
+                         cats = data.get('categories') or data.get('list') or []
+                     else:
+                         cats = data # It's a list
                      if cats: return cats
-        except: pass
+        except Exception as e:
+             err_log(f"DataEngine: Error loading guides_db.json: {e}")
         
         # ULTIMATE STATIC FALLBACK
         return [
