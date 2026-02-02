@@ -2893,6 +2893,18 @@ class handler(http.server.SimpleHTTPRequestHandler):
             document.querySelectorAll('.modal, .overlay').forEach(el => el.style.display = 'none');
         }
 
+        function openAddCat() {
+            editingCatId = null;
+            document.getElementById('cat-modal').querySelector('b').innerText = 'הוספת קטגוריה חדשה';
+            document.getElementById('cat-save-btn').innerText = 'יצירת קטגוריה';
+            document.getElementById('cat-name').value = '';
+            document.getElementById('cat-emoji').value = '📚';
+            document.getElementById('cat-type').value = 'guides';
+            initEmojiPicker();
+            document.querySelector('.overlay').style.display = 'block';
+            document.getElementById('cat-modal').style.display = 'flex';
+        }
+
         function openEditCat(id) {
             editingCatId = id;
             const cat = guides_data.find(c => c.id == id);
