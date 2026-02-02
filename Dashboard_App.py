@@ -2963,7 +2963,43 @@ class handler(http.server.SimpleHTTPRequestHandler):
         let currentEditIdx = -1;
         function openAdd() {
             currentEditIdx = -1;
-            document.getElementById('edit-modal').querySelector('b').innerText = 'Add New Project';
+            document.getElementById('edit-modal').querySelector('b').innerText = 'Add New Item';
+            
+            const cat = guides_data.find(c => c.id == selectedCatId);
+            const type = (cat && cat.type) ? cat.type : 'project';
+
+            if (type === 'table_phones') {
+                document.getElementById('lbl-cust').innerText = 'שם / מחלקה';
+                document.getElementById('lbl-device').innerText = 'מספר טלפון';
+                document.getElementById('lbl-gw').innerText = 'תפקיד / הערה';
+                document.getElementById('lbl-pm').innerText = 'אימייל';
+                document.getElementById('lbl-ver').innerText = '---';
+            } else if (type === 'table_ip') {
+                document.getElementById('lbl-cust').innerText = 'שם שרת';
+                document.getElementById('lbl-device').innerText = 'כתובת IP';
+                document.getElementById('lbl-gw').innerText = 'מיקום / VLAN';
+                document.getElementById('lbl-pm').innerText = 'PORT';
+                document.getElementById('lbl-ver').innerText = '---';
+            } else if (type === 'table_pass') {
+                document.getElementById('lbl-cust').innerText = 'שם מערכת';
+                document.getElementById('lbl-device').innerText = 'שם משתמש';
+                document.getElementById('lbl-gw').innerText = 'סיסמה';
+                document.getElementById('lbl-pm').innerText = 'הערות';
+                document.getElementById('lbl-ver').innerText = '---';
+            } else if (type === 'table_general') {
+                document.getElementById('lbl-cust').innerText = 'שם פריט';
+                document.getElementById('lbl-device').innerText = 'תיאור';
+                document.getElementById('lbl-gw').innerText = 'סטטוס';
+                document.getElementById('lbl-pm').innerText = 'הערות נוספות';
+                document.getElementById('lbl-ver').innerText = '---';
+            } else {
+                document.getElementById('lbl-cust').innerText = 'CUSTOMER';
+                document.getElementById('lbl-device').innerText = 'SOLUTION TYPE';
+                document.getElementById('lbl-gw').innerText = 'GW / CONNECTION';
+                document.getElementById('lbl-pm').innerText = 'PROJECT MANAGER';
+                document.getElementById('lbl-ver').innerText = 'VERSION';
+            }
+
             document.getElementById('edit-cust').value = '';
             document.getElementById('edit-device').value = '';
             document.getElementById('edit-gw').value = '';
@@ -2998,7 +3034,19 @@ class handler(http.server.SimpleHTTPRequestHandler):
                 document.getElementById('lbl-gw').innerText = 'מיקום / VLAN';
                 document.getElementById('lbl-pm').innerText = 'PORT';
                 document.getElementById('lbl-ver').innerText = '---';
-             } else {
+            } else if (type === 'table_pass') {
+                document.getElementById('lbl-cust').innerText = 'שם מערכת';
+                document.getElementById('lbl-device').innerText = 'שם משתמש';
+                document.getElementById('lbl-gw').innerText = 'סיסמה';
+                document.getElementById('lbl-pm').innerText = 'הערות';
+                document.getElementById('lbl-ver').innerText = '---';
+            } else if (type === 'table_general') {
+                document.getElementById('lbl-cust').innerText = 'שם פריט';
+                document.getElementById('lbl-device').innerText = 'תיאור';
+                document.getElementById('lbl-gw').innerText = 'סטטוס';
+                document.getElementById('lbl-pm').innerText = 'הערות נוספות';
+                document.getElementById('lbl-ver').innerText = '---';
+            } else {
                 document.getElementById('lbl-cust').innerText = 'CUSTOMER';
                 document.getElementById('lbl-device').innerText = 'SOLUTION TYPE';
                 document.getElementById('lbl-gw').innerText = 'GW / CONNECTION';
