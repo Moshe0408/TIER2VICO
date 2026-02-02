@@ -465,8 +465,8 @@ class DataEngine:
         # 1. Try Firestore (FAST PATH ONLY)
         if db:
             try:
-                # Use a small document for near-instant load
-                doc = db.collection('data').document('integrations').get(timeout=5)
+                # Reduced timeout to 3s to ensure we have time for the fallback on Vercel
+                doc = db.collection('data').document('integrations').get(timeout=3)
                 if doc.exists:
                     raw = doc.to_dict()
                     data = raw.get('list', []) if isinstance(raw, dict) else raw
@@ -474,25 +474,36 @@ class DataEngine:
                         log(f"DataEngine: Loaded {len(data)} from Firestore.")
                         DataEngine._cache[cache_key] = (now, data)
                         return data
-            except Exception as e: err_log(f"Firestore Integrations error: {e}")
+            except Exception as e: 
+                err_log(f"Firestore Integrations timeout/error ({e}). Falling back...")
+        else:
+            log("DataEngine: Firestore missing, using fallback chain.")
 
         # 2. Local fallback (IMMEDIATE)
         try:
             p = os.path.join(BASE_DIR, "integrations_db.json")
             if os.path.exists(p):
-                with open(p, 'r', encoding='utf-8-sig') as f:
-                    raw = json.load(f)
+                with open(p, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                    if content.startswith('\ufeff'): content = content[1:] # Manual BOM removal for safety
+                    raw = json.loads(content)
                     data = raw.get('list', []) if isinstance(raw, dict) else raw
                     if data:
-                        log(f"DataEngine: Loaded {len(data)} from local JSON.")
+                        log(f"DataEngine: Loaded {len(data)} from local JSON ({p}).")
                         DataEngine._cache[cache_key] = (now, data)
                         return data
-        except Exception as e: err_log(f"Integrations fallback error: {e}")
+                    else:
+                        err_log(f"DataEngine: JSON file {p} exists but 'list' is empty or missing.")
+            else:
+                err_log(f"DataEngine: JSON fallback file {p} NOT FOUND.")
+        except Exception as e: 
+            err_log(f"Integrations local fallback CRITICAL error: {e}")
         
         # 3. STATIC EMERGENCY FALLBACK (Ensures UI is NEVER empty)
+        log("DataEngine: Using Static Emergency Fallback for Integrations.")
         return [
-            {"Customer": "Verifone Static", "Device": "P400", "GW": "IP", "PM": "System", "Version": "v1.0", "Category": "general"},
-            {"Customer": "Check Presence", "Device": "V240m", "GW": "3G", "PM": "Auto", "Version": "v1.0", "Category": "general"}
+            {"Customer": "Verifone Static Backup", "Device": "P400", "GW": "IP", "PM": "System", "Version": "v1.0", "Category": "general"},
+            {"Customer": "System Restored - Fetching...", "Device": "V240m", "GW": "3G", "PM": "Auto", "Version": "v1.0", "Category": "general"}
         ]
 
     @staticmethod
@@ -508,7 +519,7 @@ class DataEngine:
         if db:
             # 1. FAST PATH: Consolidated 'kb' document
             try:
-                kb_doc = db.collection('data').document('kb').get(timeout=5)
+                kb_doc = db.collection('data').document('kb').get(timeout=3)
                 if kb_doc.exists:
                     data = kb_doc.to_dict()
                     cats = data.get('categories') or data.get('list') or []
@@ -517,22 +528,29 @@ class DataEngine:
                         DataEngine._cache[cache_key] = (now, cats)
                         return cats
             except Exception as e:
-                err_log(f"Fast-KB Fetch Error: {e}")
+                err_log(f"Fast-KB Fetch Timeout/Error ({e}). Falling back to local...")
 
         # 2. LOCAL FALLBACK (Very fast, reliable)
         try:
             p = os.path.join(BASE_DIR, "guides_db.json")
             if os.path.exists(p):
-                with open(p, 'r', encoding='utf-8-sig') as f:
-                    data = json.load(f)
+                with open(p, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                    if content.startswith('\ufeff'): content = content[1:] # Manual BOM removal
+                    data = json.loads(content)
                     cats = []
                     if isinstance(data, list): cats = data
                     elif isinstance(data, dict): cats = data.get('categories') or data.get('list') or []
                     if cats:
-                        log(f"DataEngine: Loaded {len(cats)} from local JSON.")
+                        log(f"DataEngine: Loaded {len(cats)} categories from local JSON ({p}).")
                         DataEngine._cache[cache_key] = (now, cats)
                         return cats
-        except Exception as e: err_log(f"Guides local fallback error: {e}")
+                    else:
+                        err_log(f"DataEngine: Guides file {p} exists but categories list is empty.")
+            else:
+                err_log(f"DataEngine: Guides fallback file {p} NOT FOUND.")
+        except Exception as e: 
+            err_log(f"Guides local fallback CRITICAL error: {e}")
         
         # 3. STATIC DEFAULT (Ultimate fallback)
         return [
