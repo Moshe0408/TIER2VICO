@@ -3314,12 +3314,31 @@ class handler(http.server.SimpleHTTPRequestHandler):
 
         function renderWarrantyTable(data) {
             uiLog(`renderWarrantyTable called with ${data ? data.length : 'null'} items`);
-            const h = document.getElementById('thead');
-            if(!h) { uiLog("ERROR: thead not found"); return; }
-            h.innerHTML = `<tr><th>לקוח</th><th>אחריות</th><th>משך</th><th>כיסוי</th></tr>`;
             
-            const b = document.getElementById('files'); 
-            if(!b) { uiLog("ERROR: tbody #files not found"); return; }
+            const card = document.getElementById('perf-card');
+            if(!card) { uiLog("ERROR: perf-card not found"); return; }
+
+            // Check if correct table structure exists
+            let h = document.getElementById('thead');
+            let b = document.getElementById('files');
+            
+            // If missing or destroyed by renderIntegrations, rebuild it
+            if(!h || !b) {
+                uiLog("Table structure missing/overwritten. Rebuilding...");
+                card.innerHTML = `
+                    <div class="card-t" id="list-t">פירוט ביצועים - אחריות</div>
+                    <table style="width:100%; border-collapse:collapse;">
+                        <thead id="thead"><tr><th>לקוח</th><th>אחריות</th><th>משך</th><th>כיסוי</th></tr></thead>
+                        <tbody id="files"></tbody>
+                    </table>
+                `;
+                h = document.getElementById('thead');
+                b = document.getElementById('files');
+            } else {
+                // Ensure headers are correct (in case renderIntegrations left its own headers)
+                h.innerHTML = `<tr><th>לקוח</th><th>אחריות</th><th>משך</th><th>כיסוי</th></tr>`;
+            }
+            
             b.innerHTML = '';
             
             // Show ALL customers from integrations even if they are not in the 'data' (filter result)
