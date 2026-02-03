@@ -997,6 +997,13 @@ class handler(http.server.SimpleHTTPRequestHandler):
                     rel_path = urllib.parse.unquote(path[1:])
                     fpath = os.path.join(BASE_DIR, rel_path)
                     
+                    rel_path = urllib.parse.unquote(path[1:])
+                    # Check BASE_DIR first, then UPLOAD_DIR if it's an upload
+                    fpath = os.path.join(BASE_DIR, rel_path)
+                    
+                    if not os.path.exists(fpath) and path.startswith('/uploads/'):
+                        fpath = os.path.join(UPLOAD_DIR, os.path.basename(rel_path))
+                    
                     if os.path.exists(fpath) and os.path.isfile(fpath):
                         self.send_response(200)
                         ext = os.path.splitext(fpath)[1].lower()
