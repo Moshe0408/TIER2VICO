@@ -2301,7 +2301,7 @@ class handler(http.server.SimpleHTTPRequestHandler):
             });
             
             if(sect === 'customers') {
-                html += `<div class="sub-nav-item ${subSect==='warranty'?'active':''}" onclick="selectedSubCatId=null; subNav('warranty')">🛡️ אחריות לקוחות</div>`;
+                html += `<div class="sub-nav-item ${subSect==='warranty'?'active':''}" onclick="selectedSubCatId=null; setTimeout(() => subNav('warranty'), 10)">🛡️ אחריות לקוחות</div>`;
                 html += `<div class="sub-nav-item ${subSect==='managers'?'active':''}" onclick="selectedSubCatId=null; subNav('managers')">מנהלי פרויקטים</div>`;
             }
             container.innerHTML = html;
