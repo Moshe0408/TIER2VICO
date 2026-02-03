@@ -720,6 +720,13 @@ class DataEngine:
                         gid = g.get('id') or str(uuid.uuid4())
                         g['id'] = gid
                         g['Category'] = cid # Link to parent
+                        
+                        # Check size before adding
+                        g_size = len(json.dumps(g))
+                        if g_size > 900000: # ~900KB safety limit
+                            log(f"WARNING: Guide {gid} is too large ({g_size} bytes). Truncating content.")
+                            g['content'] = "<p style='color:red'>⚠️ Error: Guide content too large (images?). Please upload images separately.</p>"
+
                         g_ref = db.collection('guides').document(gid)
                         batch.set(g_ref, g)
                         batch_counter += 1
@@ -735,6 +742,12 @@ class DataEngine:
                             g['id'] = gid
                             g['Category'] = cid # Link to main parent category
                             g['SubCategory'] = sub.get('id') # Link to subcategory
+                            # Check size before adding
+                            g_size = len(json.dumps(g))
+                            if g_size > 900000: # ~900KB safety limit
+                                log(f"WARNING: Guide {gid} is too large ({g_size} bytes). Truncating content.")
+                                g['content'] = "<p style='color:red'>⚠️ Error: Guide content too large (images?). Please upload images separately.</p>"
+                            
                             g_ref = db.collection('guides').document(gid)
                             batch.set(g_ref, g)
                             batch_counter += 1
