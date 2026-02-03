@@ -2243,33 +2243,47 @@ class handler(http.server.SimpleHTTPRequestHandler):
         }
 
         // --- NEW UPDATE LOGIC FOR GUIDES ---
+        function safeHide(selector) {
+            const el = selector.startsWith('.') ? document.querySelector(selector) : document.getElementById(selector);
+            if(el) el.style.display = 'none';
+            else uiLog(`WARN: SafeHide failed for ${selector}`);
+        }
+        function safeShow(selector, displayType = 'block') {
+            const el = selector.startsWith('.') ? document.querySelector(selector) : document.getElementById(selector);
+            if(el) el.style.display = displayType;
+            else uiLog(`WARN: SafeShow failed for ${selector}`);
+        }
+
+        // --- NEW UPDATE LOGIC FOR GUIDES ---
         function update(doSyncHash = true) {
             uiLog(`update() called. Sect: ${sect}, SubSect: ${subSect}`);
             if(doSyncHash) syncHash();
             renderTopNav();
             
-            // Hide all main sections by default
-            document.getElementById('filter-box').style.display = 'none';
-            document.getElementById('report-filter-box').style.display = 'none';
-            document.querySelector('.sub-nav').style.display = 'none';
-            document.querySelector('.kpi-row').style.display = 'none';
-            document.getElementById('guides-section').style.display = 'none';
-            document.getElementById('customers-showcase').style.display = 'none';
-            document.getElementById('perf-card').style.display = 'none';
-            document.getElementById('manager-view')?.remove();
+            // Hide all main sections by default - USING SAFE HELPERS
+            safeHide('filter-box');
+            safeHide('report-filter-box');
+            safeHide('.sub-nav');
+            safeHide('.kpi-row');
+            safeHide('guides-section');
+            safeHide('customers-showcase');
+            safeHide('perf-card');
+            
+            const mv = document.getElementById('manager-view');
+            if(mv) mv.remove();
 
             if (sect === 'customers') {
-                document.getElementById('filter-box').style.display = 'flex';
-                document.querySelector('.sub-nav').style.display = 'flex';
-                document.querySelector('.kpi-row').style.display = 'grid';
-                document.getElementById('perf-card').style.display = 'block';
+                safeShow('filter-box', 'flex');
+                safeShow('.sub-nav', 'flex');
+                safeShow('.kpi-row', 'grid');
+                safeShow('perf-card', 'block');
                 
-                document.getElementById('t').innerText = 'אינטגרציות ופרויקטים';
-                document.getElementById('s').innerText = subSect === 'projects' ? 'ניהול מחזור חיי פרויקט' : 'ניהול עומסי מנהלים';
+                const t = document.getElementById('t'); if(t) t.innerText = 'אינטגרציות ופרויקטים';
+                const s = document.getElementById('s'); if(s) s.innerText = subSect === 'projects' ? 'ניהול מחזור חיי פרויקט' : 'ניהול עומסי מנהלים';
                 
                 renderCustomerSubNav();
                 
-                if(!stats_data || !stats_data.Integrations) return;
+                if(!stats_data || !stats_data.Integrations) { uiLog("No stats data"); return; }
                 let d = stats_data.Integrations;
                 
                 if(subSect === 'projects' && selectedSubCatId) {
@@ -2278,65 +2292,66 @@ class handler(http.server.SimpleHTTPRequestHandler):
 
                 uk("סה\"כ לקוחות", d.length, "בביצוע", d.length, "איכות", "100%", "סטטוס", "פעיל");
                 if(subSect === 'projects') {
-                    document.getElementById('perf-card').style.display = 'block';
-                    document.getElementById('files').style.display = 'table-row-group'; 
+                    safeShow('perf-card', 'block');
+                    safeShow('files', 'table-row-group');
                     renderIntegrations(d);
                 } else if(subSect === 'warranty') {
-                    document.getElementById('perf-card').style.display = 'block';
-                    document.getElementById('files').style.display = 'table-row-group';
-                    // Force full list for warranty
+                    safeShow('perf-card', 'block');
+                    safeShow('files', 'table-row-group');
                     renderWarrantyTable(stats_data.Integrations || []);
                 } else {
-                    document.getElementById('perf-card').style.display = 'none';
+                    safeHide('perf-card');
                     renderManagers(d);
                 }
             } else if (sect === 'our-customers') {
-                document.getElementById('customers-showcase').style.display = 'block';
-                document.getElementById('t').innerText = 'בין לקוחותנו';
-                document.getElementById('s').innerText = 'מערכת אינטגרציות ארגונית';
+                safeShow('customers-showcase', 'block');
+                const t = document.getElementById('t'); if(t) t.innerText = 'בין לקוחותנו';
+                const s = document.getElementById('s'); if(s) s.innerText = 'מערכת אינטגרציות ארגונית';
                 renderOurCustomers();
             } else if (sect === 'reports') {
-                document.getElementById('report-filter-box').style.display = 'flex';
-                document.querySelector('.kpi-row').style.display = 'grid';
+                safeShow('report-filter-box', 'flex');
+                safeShow('.kpi-row', 'grid');
                 
-                document.getElementById('t').innerText = 'ניתוח ביצועים';
-                document.getElementById('s').innerText = 'דוחות API ומדדי שירות';
+                const t = document.getElementById('t'); if(t) t.innerText = 'ניתוח ביצועים';
+                const s = document.getElementById('s'); if(s) s.innerText = 'דוחות API ומדדי שירות';
                 renderReports();
             } else if (sect === 'guides') {  
                 const cat = guides_data.find(c => c.id == selectedCatId);
                 if (cat && (cat.type === 'table' || (cat.type && cat.type.startsWith('table')))) {
-                    document.getElementById('filter-box').style.display = 'flex';
-                    document.querySelector('.sub-nav').style.display = 'flex';
-                    document.querySelector('.kpi-row').style.display = 'grid';
-                    document.getElementById('perf-card').style.display = 'block';
-                    document.getElementById('t').innerText = cat.name;
-                    document.getElementById('s').innerText = 'קונסולת ניהול נתונים';
+                    safeShow('filter-box', 'flex');
+                    safeShow('.sub-nav', 'flex');
+                    safeShow('.kpi-row', 'grid');
+                    safeShow('perf-card', 'block');
+                    const t = document.getElementById('t'); if(t) t.innerText = cat.name;
+                    const s = document.getElementById('s'); if(s) s.innerText = 'קונסולת ניהול נתונים';
                     renderCustomerSubNav(); 
                     let d = cat.guides || []; 
                     if(selectedSubCatId) d = d.filter(x => x.Category === selectedSubCatId);
                     uk("סה\"כ שורות", d.length, "לקוחות פעילים", d.length, "בריאות", "100%", "תבנית", "טבלה");
                     renderIntegrations(d);
                 } else {
-                    document.getElementById('guides-section').style.display = 'flex';
+                    safeShow('guides-section', 'flex');
                     const cat = guides_data.find(c => c.id == selectedCatId);
                     
                     // Always show the "Add Guide" button area if we are in Guides section
-                    document.getElementById('g-sidebar').style.display = 'flex';
+                    safeShow('g-sidebar', 'flex');
                     
                     if(!cat) {
                         // Default view for Guides when no category is selected
-                        document.getElementById('t').innerText = 'מרכז ידע ותיעוד';
-                        document.getElementById('s').innerText = 'בחר קטגוריה מהתפריט העליון';
-                        document.getElementById('g-nav-tree').innerHTML = '<div style="padding:20px; color:var(--dim); text-align:center">אנא בחר קטגוריה לעריכה או צפייה</div>';
+                        const t = document.getElementById('t'); if(t) t.innerText = 'מרכז ידע ותיעוד';
+                        const s = document.getElementById('s'); if(s) s.innerText = 'בחר קטגוריה מהתפריט העליון';
+                        const tree = document.getElementById('g-nav-tree'); if(tree) tree.innerHTML = '<div style="padding:20px; color:var(--dim); text-align:center">אנא בחר קטגוריה לעריכה או צפייה</div>';
                         return;
                     }
-
-                    document.querySelector('.kpi-row').style.display = 'none';
-                    document.querySelector('.sub-nav').style.display = 'none';
+                    
+                    // For document guides, hide KPIs and sub-nav
+                    safeHide('.kpi-row');
+                    safeHide('.sub-nav');
+                    
                     if(selectedGuideId) renderGuideView(selectedCatId, selectedGuideId);
                     else {
-                        document.getElementById('t').innerText = cat.name;
-                        document.getElementById('s').innerText = 'מרכז תיעוד ומדריכים';
+                        const t = document.getElementById('t'); if(t) t.innerText = cat.name;
+                        const s = document.getElementById('s'); if(s) s.innerText = 'מרכז תיעוד ומדריכים';
                         renderGuideContent(cat);
                     }
                 }
