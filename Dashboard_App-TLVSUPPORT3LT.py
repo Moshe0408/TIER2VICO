@@ -348,78 +348,6 @@ CUSTOMER_LOGOS = {
         "logo": "https://netlunch.co.il/wp-content/uploads/cropped-LogoMedium2-png.png",
         "desc": "פתרון דיגיטלי מתקדם לניהול הטבות מזון וסבסוד ארוחות לעובדים, המקשר בין עסקים למאות מסעדות ונקודות מכירה.",
     },
-    "rami levy": {
-        "name": "רמי לוי", 
-        "logo": "https://upload.wikimedia.org/wikipedia/he/8/8e/Rami_Levy_Hashikma_Marketing_Logo.svg",
-        "desc": "רשת המזון והקמעונאות השלישית בגודלה בישראל, הפועלת תחת הסיסמה 'סל הקניות הזול ביותר' עם עשרות סניפים ומרכזי לוגיסטיקה.",
-        "fallbacks": ["https://logo.clearbit.com/ramilevy.co.il"]
-    },
-    "super-pharm": {
-        "name": "סופר-פארם", 
-        "logo": "https://upload.wikimedia.org/wikipedia/he/3/3d/Super-Pharm_Logo.svg",
-        "desc": "רשת הפארם הגדולה בישראל, המפעילה מאות סניפים המשלבים בית מרקחת, קוסמטיקה וטואלטיקה תחת חוויית קניה בינלאומית.",
-        "fallbacks": ["https://logo.clearbit.com/super-pharm.co.il"]
-    },
-    "victory": {
-        "name": "ויקטורי", 
-        "logo": "https://upload.wikimedia.org/wikipedia/he/8/83/Victory_supermarket_logo.png",
-        "desc": "רשת שיווק מזון קמעונאית מהמובילות בישראל, המפעילה עשרות סניפי דיסקאונט בפריסה ארצית עם דגש על איכות ומחירים תחרותיים.",
-        "fallbacks": ["https://logo.clearbit.com/victory.co.il"]
-    },
-    "yohananof": {
-        "name": "יוחננוף", 
-        "logo": "https://upload.wikimedia.org/wikipedia/he/f/fd/Yohananof_logo.png",
-        "desc": "רשת סופרמרקטים בפריסה ארצית המפעילה מרכזי מכר ענקיים (Hyper-markets) המציעים חוויית קניה מקיפה וחסכונית.",
-        "fallbacks": ["https://logo.clearbit.com/yochananof.co.il"]
-    },
-    "castro": {
-        "name": "קסטרו", 
-        "logo": "https://upload.wikimedia.org/wikipedia/commons/2/23/Castro_logo.svg",
-        "desc": "מותג האופנה והקמעונאות המוביל בישראל, המפעיל מאות חנויות אופנה בארץ ובעולם תחת קבוצת קסטרו-הודיס.",
-        "fallbacks": ["https://logo.clearbit.com/castro.com"]
-    },
-    "fox": {
-        "name": "פוקס", 
-        "logo": "https://upload.wikimedia.org/wikipedia/he/6/6f/Logo-fox.png",
-        "desc": "קבוצת קמעונאות האופנה והלייף-סטייל הגדולה בישראל, המנהלת מגוון רחב של מותגים מקומיים ובינלאומיים בפריסה ארצית.",
-        "fallbacks": ["https://logo.clearbit.com/fox.co.il"]
-    },
-    "adidas": {
-        "name": "אדידס", 
-        "logo": "https://upload.wikimedia.org/wikipedia/commons/2/20/Adidas_Logo.svg", 
-        "desc": "ענקית הלבשת הספורט הבינלאומית, המשלבת טכנולוגיה ועיצוב בדגש על ביצועים וסגנון חיים.",
-        "fallbacks": ["https://logo.clearbit.com/adidas.co.il"]
-    },
-    "el al": {
-        "name": "אל על", 
-        "logo": "https://upload.wikimedia.org/wikipedia/commons/2/2a/El_Al_logo.svg", 
-        "desc": "חברת התעופה הלאומית של ישראל, המחברת את המדינה לעולם עם צי מטוסים מודרני ושירות כחול-לבן.",
-        "fallbacks": ["https://logo.clearbit.com/elal.com"]
-    },
-    "fattal": {
-        "name": "מלונות פתאל", 
-        "logo": "https://upload.wikimedia.org/wikipedia/he/8/8e/Fattal_Hotels_logo.svg", 
-        "desc": "רשת המלונות הגדולה בישראל, המציעה חוויית אירוח יוקרתית ופריסה רחבה של מותגים בארץ ובאירופה.",
-        "fallbacks": ["https://logo.clearbit.com/fattal-hotels.com"]
-    },
-    "decathlon": {
-        "name": "דקאטלון", 
-        "logo": "https://upload.wikimedia.org/wikipedia/commons/0/08/Decathlon_Logo.svg", 
-        "desc": "רשת קמעונאות הספורט הגדולה בעולם, המציעה ציוד וביגוד לכל ענפי הספורט תחת קורת גג אחת במחירים נגישים.",
-        "fallbacks": ["https://logo.clearbit.com/decathlon.co.il"]
-    },
-    "burger king": {
-        "name": "ברגר קינג", 
-        "logo": "https://upload.wikimedia.org/wikipedia/commons/8/85/Burger_King_logo_%282021%29.svg", 
-        "desc": "רשת המבורגרים בינלאומית אייקונית, המפורסמת בצלייה על האש ובכריך ה-Whopper האהוב.",
-        "fallbacks": ["https://logo.clearbit.com/burgerking.co.il"]
-    },
-    "strauss": {
-        "name": "שטראוס", 
-        "logo": "https://upload.wikimedia.org/wikipedia/he/6/6f/Strauss_Logo.svg", 
-        "desc": "אחת מחברות המזון והמשקאות הגדולות בישראל, הידועה במותגי המחלבה, הסלטים, הקפה והממתקים שלה.",
-        "fallbacks": ["https://logo.clearbit.com/strauss-group.com"]
-    },
     "verifone": {
         "name": "Verifone", 
         "logo": "https://upload.wikimedia.org/wikipedia/commons/9/98/Verifone_Logo.svg",
@@ -2126,41 +2054,31 @@ class handler(http.server.SimpleHTTPRequestHandler):
                 const files = Array.from(e.dataTransfer.files);
                 if(files.length === 0) return;
                 
-                // Get category from current context or prompt
-                let catId = selectedCatId;
+                // Get category from current context
+                const catId = selectedCatId;
                 if(!catId) {
-                    if (guides_data.length > 0) {
-                        const first = guides_data[0];
-                        if(confirm(`לא נבחרה קטגוריה. להעלות ל"${first.name}"?`)) {
-                            catId = first.id;
-                            selectedCatId = catId;
-                        } else return;
-                    } else {
-                        alert('אנא צור קטגוריה תחילה');
-                        return;
-                    }
+                    alert('יש לבחור קטגוריה תחילה מהתפריט הצדדי');
+                    return;
                 }
                 
                 // Show progress
                 const progressDiv = document.createElement('div');
-                progressDiv.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(15,23,42,0.95);padding:40px;border-radius:24px;z-index:9999;color:white;text-align:center;box-shadow:0 0 50px rgba(0,0,0,0.5);border:1px solid var(--border);backdrop-filter:blur(20px);';
-                progressDiv.innerHTML = `<div style="font-size:40px; margin-bottom:20px;">📤</div><div style="font-size:24px;font-weight:900;margin-bottom:10px;">מעלה ${files.length} קבצים...</div><div id="progress-text" style="font-size:30px; font-weight:900; color:var(--accent)">0%</div>`;
+                progressDiv.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,0.9);padding:30px;border-radius:12px;z-index:9999;color:white;text-align:center;';
+                progressDiv.innerHTML = `<div style="font-size:24px;margin-bottom:10px;">מעלה ${files.length} קבצים...</div><div id="progress-text">0%</div>`;
                 document.body.appendChild(progressDiv);
                 
                 let completed = 0;
                 for(let file of files) {
-                    const ok = await processFileToGuide(file, catId);
-                    if(ok) completed++;
+                    await processFileToGuide(file, catId);
+                    completed++;
                     document.getElementById('progress-text').innerText = Math.round((completed/files.length)*100) + '%';
                 }
                 
                 await syncGuides();
                 update();
                 
-                setTimeout(() => {
-                    document.body.removeChild(progressDiv);
-                    if(completed > 0) alert('העלאה הושלמה בהצלחה!');
-                }, 500);
+                document.body.removeChild(progressDiv);
+                alert(`${files.length} מדריכים נוספו בהצלחה!`);
             });
         }
 
@@ -2540,9 +2458,7 @@ class handler(http.server.SimpleHTTPRequestHandler):
                 
                 // Try to find matching logo and translation
                 for(let k in logos) {
-                    const normK = k.toLowerCase().replace(/[^a-zA-Z0-9\u0590-\u05FF]/g, '');
-                    const normKey = key.replace(/[^a-zA-Z0-9\u0590-\u05FF]/g, '');
-                    if(normKey.includes(normK) || normK.includes(normKey)) {
+                    if(key.includes(k.toLowerCase())) {
                         displayData = logos[k];
                         break;
                     }
@@ -2973,7 +2889,6 @@ class handler(http.server.SimpleHTTPRequestHandler):
                 const formData = new FormData();
                 formData.append('file', file);
                 const uploadResp = await fetch('/api/upload', { method: 'POST', body: formData });
-                if(!uploadResp.ok) throw new Error("Upload failed");
                 const uploadData = await uploadResp.json();
                 
                 // Extract content
@@ -2982,13 +2897,9 @@ class handler(http.server.SimpleHTTPRequestHandler):
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ url: uploadData.url })
                 });
-                if(!extractResp.ok) throw new Error("Extraction failed");
                 const extractData = await extractResp.json();
                 
-                if(!extractData.content || extractData.content.startsWith('Error:')) {
-                    alert(`שגיאה בפיענוח הקובץ ${file.name}: ${extractData.content}`);
-                    return false;
-                }
+                if(!extractData.content) return;
                 
                 // Extract images from content
                 const tempDiv = document.createElement('div');
@@ -2998,22 +2909,20 @@ class handler(http.server.SimpleHTTPRequestHandler):
                 
                 // Create guide
                 const cat = guides_data.find(c => c.id == catId);
-                if(!cat) return false;
+                if(!cat) return;
                 
                 const guideObj = {
                     id: Date.now().toString() + Math.random().toString().substring(2, 8),
-                    title: file.name.replace(/\.(docx?|pdf|txt)$/i, ''),
+                    title: file.name.replace(/\.(docx?|pdf)$/i, ''),
                     content: extractData.content,
-                    images: images,
-                    Category: catId
+                    images: images
                 };
                 
                 if(!cat.guides) cat.guides = [];
                 cat.guides.push(guideObj);
-                return true;
+                
             } catch(e) {
                 console.error('Error processing file:', file.name, e);
-                return false;
             }
         }
 
@@ -3240,19 +3149,18 @@ class handler(http.server.SimpleHTTPRequestHandler):
             
             const b = document.getElementById('files'); b.innerHTML = '';
             
-            // Show ALL customers from integrations even if they are not in the 'data' (filter result)
-            // if 'data' is the full list from stats_data.Integrations
-            const list = data || [];
-            
-            list.forEach((r) => {
+            const projectCustomers = new Set(stats_data.Integrations.map(x => x.Customer));
+
+            data.forEach((r) => {
                 const hasWarrantyInfo = r.WarrantyStatus && r.WarrantyStatus !== 'n/a' && r.WarrantyStatus !== 'אין';
-                const status = hasWarrantyInfo ? '✅ ' + r.WarrantyStatus : '⚪ ללא מידע';
-                
+                if (!hasWarrantyInfo && projectCustomers.has(r.Customer)) return;
+
+                const status = (r.WarrantyStatus || 'אין').includes('יש') ? '✅ ' + r.WarrantyStatus : '❌ ' + (r.WarrantyStatus || 'n/a');
                 b.innerHTML += `<tr>
                     <td style="font-size:18px"><b>${r.Customer}</b></td>
                     <td style="font-size:16px">${status}</td>
                     <td style="font-size:16px">${r.WarrantyDuration || '-'}</td>
-                    <td style="font-size:15px; max-width:400px; line-height:1.5">${r.WarrantyCoverage || '---'}</td>
+                    <td style="font-size:15px; max-width:400px; line-height:1.5">${r.WarrantyCoverage || '-'}</td>
                 </tr>`;
             });
         }
