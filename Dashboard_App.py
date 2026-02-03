@@ -3243,23 +3243,35 @@ class handler(http.server.SimpleHTTPRequestHandler):
 
         function renderWarrantyTable(data) {
             const h = document.getElementById('thead');
+            if(!h) return;
             h.innerHTML = `<tr><th>לקוח</th><th>אחריות</th><th>משך</th><th>כיסוי</th></tr>`;
             
-            const b = document.getElementById('files'); b.innerHTML = '';
+            const b = document.getElementById('files'); 
+            if(!b) return;
+            b.innerHTML = '';
             
             // Show ALL customers from integrations even if they are not in the 'data' (filter result)
-            // if 'data' is the full list from stats_data.Integrations
             const list = data || [];
+            
+            if (list.length === 0) {
+                b.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:30px; font-weight:bold; color:var(--dim);">אין נתונים להצגה</td></tr>';
+                return;
+            }
             
             list.forEach((r) => {
                 const hasWarrantyInfo = r.WarrantyStatus && r.WarrantyStatus !== 'n/a' && r.WarrantyStatus !== 'אין';
                 const status = hasWarrantyInfo ? '✅ ' + r.WarrantyStatus : '⚪ ללא מידע';
                 
+                // Safety check for null values
+                const customer = r.Customer || 'Unknown';
+                const duration = r.WarrantyDuration || '-';
+                const coverage = r.WarrantyCoverage || '---';
+
                 b.innerHTML += `<tr>
-                    <td style="font-size:18px"><b>${r.Customer}</b></td>
+                    <td style="font-size:18px"><b>${customer}</b></td>
                     <td style="font-size:16px">${status}</td>
-                    <td style="font-size:16px">${r.WarrantyDuration || '-'}</td>
-                    <td style="font-size:15px; max-width:400px; line-height:1.5">${r.WarrantyCoverage || '---'}</td>
+                    <td style="font-size:16px">${duration}</td>
+                    <td style="font-size:15px; max-width:400px; line-height:1.5">${coverage}</td>
                 </tr>`;
             });
         }
