@@ -1479,7 +1479,7 @@ class handler(http.server.SimpleHTTPRequestHandler):
 <html lang="he" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <title>Vico Intelligence (Live Mode)</title>
+    <title>Vico Intelligence (V3.0) - Live</title>
     <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
     
     <!-- Firebase SDK -->
