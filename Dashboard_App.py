@@ -2239,9 +2239,12 @@ class handler(http.server.SimpleHTTPRequestHandler):
                 uk("סה\"כ לקוחות", d.length, "בביצוע", d.length, "איכות", "100%", "סטטוס", "פעיל");
                 if(subSect === 'projects') {
                     document.getElementById('perf-card').style.display = 'block';
+                    document.getElementById('files').style.display = 'table-row-group'; 
                     renderIntegrations(d);
                 } else if(subSect === 'warranty') {
                     document.getElementById('perf-card').style.display = 'block';
+                    document.getElementById('files').style.display = 'table-row-group';
+                    // Force full list for warranty
                     renderWarrantyTable(stats_data.Integrations || []);
                 } else {
                     document.getElementById('perf-card').style.display = 'none';
