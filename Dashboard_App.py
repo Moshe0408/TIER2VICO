@@ -1499,8 +1499,47 @@ class handler(http.server.SimpleHTTPRequestHandler):
 <html lang="he" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <title>Vico Intelligence (V3.0) - Live</title>
+    <title>Vico Intelligence (V3.1 Debug) - Live</title>
     <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+    
+    <!-- VISUAL DEBUGGER -->
+    <style>
+        #debug-console {
+            position: fixed; bottom: 0; right: 0; width: 400px; height: 300px;
+            background: rgba(0,0,0,0.9); border: 2px solid red; z-index: 9999;
+            color: #0f0; font-family: monospace; font-size: 11px;
+            overflow-y: auto; padding: 10px; display: none;
+            flex-direction: column-reverse; pointer-events: none;
+        }
+        #debug-toggle {
+            position: fixed; bottom: 10px; right: 10px; z-index: 10000;
+            background: red; color: white; width: 30px; height: 30px;
+            border-radius: 50%; opacity: 0.2; cursor: pointer;
+        }
+        #debug-toggle:hover { opacity: 1; }
+    </style>
+    <div id="debug-console"></div>
+    <div id="debug-toggle" onclick="toggleDebug()">🐞</div>
+    <script>
+        function toggleDebug() {
+            const d = document.getElementById('debug-console');
+            d.style.display = d.style.display === 'none' ? 'flex' : 'none';
+        }
+        function uiLog(msg) {
+            const d = document.getElementById('debug-console');
+            if(d) {
+                const line = document.createElement('div');
+                line.style.borderBottom = '1px solid #333';
+                line.innerText = msg;
+                d.prepend(line);
+            }
+            console.log(msg);
+        }
+        window.onerror = function(msg, url, lineNo, columnNo, error) {
+            uiLog(`ERROR: ${msg} line ${lineNo}`);
+            return false;
+        };
+    </script>
     
     <!-- Firebase SDK -->
     <script type="module">
@@ -2079,7 +2118,7 @@ class handler(http.server.SimpleHTTPRequestHandler):
         let selectedGuideId = null;
 
         async function init() {
-            console.log("init() started");
+            uiLog("init() started - V3.1 Debug");
             
             // Fail-safe to remove loader if something hangs
             setTimeout(() => {
@@ -2205,6 +2244,7 @@ class handler(http.server.SimpleHTTPRequestHandler):
 
         // --- NEW UPDATE LOGIC FOR GUIDES ---
         function update(doSyncHash = true) {
+            uiLog(`update() called. Sect: ${sect}, SubSect: ${subSect}`);
             if(doSyncHash) syncHash();
             renderTopNav();
             
@@ -3258,18 +3298,20 @@ class handler(http.server.SimpleHTTPRequestHandler):
         }
 
         function renderWarrantyTable(data) {
+            uiLog(`renderWarrantyTable called with ${data ? data.length : 'null'} items`);
             const h = document.getElementById('thead');
-            if(!h) return;
+            if(!h) { uiLog("ERROR: thead not found"); return; }
             h.innerHTML = `<tr><th>לקוח</th><th>אחריות</th><th>משך</th><th>כיסוי</th></tr>`;
             
             const b = document.getElementById('files'); 
-            if(!b) return;
+            if(!b) { uiLog("ERROR: tbody #files not found"); return; }
             b.innerHTML = '';
             
             // Show ALL customers from integrations even if they are not in the 'data' (filter result)
             const list = data || [];
             
             if (list.length === 0) {
+                uiLog("List is empty - showing 'No Data'");
                 b.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:30px; font-weight:bold; color:var(--dim);">אין נתונים להצגה</td></tr>';
                 return;
             }
