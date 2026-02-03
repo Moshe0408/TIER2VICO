@@ -2222,7 +2222,7 @@ class handler(http.server.SimpleHTTPRequestHandler):
                     renderIntegrations(d);
                 } else if(subSect === 'warranty') {
                     document.getElementById('perf-card').style.display = 'block';
-                    renderWarrantyTable(d);
+                    renderWarrantyTable(stats_data.Integrations || []);
                 } else {
                     document.getElementById('perf-card').style.display = 'none';
                     renderManagers(d);
