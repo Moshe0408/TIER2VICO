@@ -694,27 +694,23 @@ def send_whatsapp_message_direct(driver, group_name, message):
 
         if not is_open:
             log(f"🔍 מחפש את הקבוצה '{group_name}'...")
+            group_xpath = f'//span[@title="{group_name}"]'
 
-            # 2. ניסיון למצוא את הקבוצה ברשימת הצ'אטים (חיפוש גמיש)
-            group_xpath = '//span[contains(@title, "דוחות") and contains(@title, "Tier2")]'
+            # 2. ניסיון למצוא ברשימת הצ'אטים
             try:
-                # גלילה קלה למעלה כדי לוודא שהרשימה מעודכנת
                 side_pane = driver.find_element(By.ID, "pane-side")
                 driver.execute_script("arguments[0].scrollTop = 0;", side_pane)
-
                 group_el = wait.until(EC.element_to_be_clickable((By.XPATH, group_xpath)))
-                group_el.click()
+                driver.execute_script("arguments[0].click();", group_el)
             except Exception:
-                log(f"⚠️ קבוצה לא נמצאה ברשימה, מנסה לבצע חיפוש אקטיבי...")
-                # 3. חיפוש דרך תיבת החיפוש
-                search_xpaths = [
-                    '//div[@role="textbox" and @data-tab="3"]',
-                    '//div[@contenteditable="true"][@data-tab="3"]//p',
-                    '//div[@contenteditable="true"][@data-tab="3"]',
-                    '//div[@title="חיפוש או התחלת צ\'אט חדש"]'
-                ]
+                log(f"⚠️ קבוצה לא נמצאה ברשימה, מנסה חיפוש אקטיבי...")
+                # 3. חיפוש דרך תיבת החיפוש — JavaScript click להימנע מ-interception
                 search_box = None
-                for sx in search_xpaths:
+                for sx in [
+                    '//div[@contenteditable="true"][@data-tab="3"]',
+                    '//div[@role="textbox" and @data-tab="3"]',
+                    '//div[@aria-label][@contenteditable="true"][@data-tab="3"]',
+                ]:
                     try:
                         search_box = driver.find_element(By.XPATH, sx)
                         break
@@ -722,14 +718,16 @@ def send_whatsapp_message_direct(driver, group_name, message):
                         continue
 
                 if not search_box:
-                    raise Exception("לא הצלחתי לאתר את תיבת החיפוש בוואטסאפ")
+                    raise Exception("לא נמצאה תיבת חיפוש")
 
-                search_box.click()
-                search_box.send_keys(group_name)
+                driver.execute_script("arguments[0].click();", search_box)
+                time.sleep(0.3)
+                pyperclip.copy(group_name)
+                search_box.send_keys(Keys.CONTROL, "v")
                 time.sleep(2)
 
                 group_el = wait.until(EC.element_to_be_clickable((By.XPATH, group_xpath)))
-                group_el.click()
+                driver.execute_script("arguments[0].click();", group_el)
 
         # 4. מציאת תיבת ההקלדה והדבקה (Paste)
         time.sleep(1)
