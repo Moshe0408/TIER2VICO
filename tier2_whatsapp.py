@@ -4,12 +4,12 @@ import sys
 import time
 import datetime
 import traceback
+import threading
 import requests
 import pandas as pd
 import pytz
 import json
 import pyperclip
-from collections import defaultdict
 
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
@@ -58,9 +58,7 @@ alerted_ticket_ids = set()
 CHROME_USER_DATA_DIR = os.path.join(os.getcwd(), "AutomationProfile_WA")
 REAL_PROFILE_PATH = CHROME_USER_DATA_DIR
 VERINT_REPORTS_DIR = os.path.join(os.getcwd(), "Verint_Reports")
-WA_DEBUG_PORT = 9223 # פורט נפרד עבור וואטסאפ
-
-
+WA_DEBUG_PORT = 9223  # פורט נפרד עבור וואטסאפ
 
 DESKTOP = os.path.join(os.environ.get('USERPROFILE', '.'), 'Desktop')
 LOG_DIR = os.path.join(DESKTOP, 'tier2_logs')
@@ -70,7 +68,9 @@ LOG_FILE = os.path.join(LOG_DIR, "tier2_monitor.log")
 TOKEN_CACHE_FILE = os.path.join(LOG_DIR, "glassix_token_cache.json")
 TOKEN_EXPIRY_SECONDS = 3600  # 1 שעה
 
+# משתנה גלובלי שישמור תמיד את הטוקן האחרון
 global_token = None
+
 
 # ---------- LOGGING ----------
 def log(msg, also_print=True):
@@ -85,10 +85,12 @@ def log(msg, also_print=True):
     if also_print:
         print(line)
 
+
 def log_exc(context=""):
     etype, evalue, etb = sys.exc_info()
     tb_str = "".join(traceback.format_exception(etype, evalue, etb))
     log(f"שגיאה: {context}\n{tb_str}", also_print=True)
+
 
 # ---------- TOKEN HANDLING ----------
 def save_token(token):
@@ -98,6 +100,7 @@ def save_token(token):
             json.dump(data, f)
     except Exception:
         log_exc("שמירת טוקן")
+
 
 def load_token():
     try:
@@ -112,6 +115,7 @@ def load_token():
     except Exception:
         log_exc("טעינת טוקן")
     return None
+
 
 def get_access_token():
     url = "https://verifone.glassix.com/api/v1.2/token/get"
@@ -138,6 +142,7 @@ def get_access_token():
         log_exc("קבלת טוקן")
         raise
 
+
 def get_token():
     token = load_token()
     if token:
@@ -145,13 +150,9 @@ def get_token():
     token = get_access_token()
     save_token(token)
     return token
-    
+
+
 # ---------- TOKEN REFRESH LOOP ----------
-import threading
-
-# משתנה גלובלי שישמור תמיד את הטוקן האחרון
-global_token = None  
-
 def refresh_token_loop():
     global global_token
     while True:
@@ -161,6 +162,7 @@ def refresh_token_loop():
         except Exception:
             log_exc("שגיאה בחידוש טוקן")
         time.sleep(3 * 60 * 60)  # ריענון כל 3 שעות
+
 
 # ---------- TIME HELPERS ----------
 def ensure_utc(dt: datetime.datetime):
@@ -178,6 +180,7 @@ def ensure_utc(dt: datetime.datetime):
             return dt.astimezone(pytz.utc).replace(tzinfo=None)
     except Exception:
         return None
+
 
 def to_utc_dt(value):
     """המרת ערך לתאריך/שעה ב-UTC כ- datetime (עם tzinfo=UTC)."""
@@ -202,6 +205,8 @@ def to_utc_dt(value):
         return dt.astimezone(pytz.UTC)
     except Exception:
         return None
+
+
 # ---------- API ----------
 def get_tickets(token, since=None, until=None, states=None, retries=3, max_wait_time=600):
     """
@@ -211,15 +216,14 @@ def get_tickets(token, since=None, until=None, states=None, retries=3, max_wait_
     headers = {"Authorization": f"Bearer {token}"}
     now = datetime.datetime.now(datetime.timezone.utc)
 
-
     # הכנה של טווח הזמנים (UTC)
     since_dt = ensure_utc(since or (now - datetime.timedelta(days=7)))
     until_dt = ensure_utc(until or now)
     if since_dt and until_dt and since_dt > until_dt:
         since_dt, until_dt = until_dt, since_dt
 
-    since_str = (since_dt or now - datetime.timedelta(days=7)).strftime("%d/%m/%Y %H:%M:%S") + ":00"
-    until_str = (until_dt or now).strftime("%d/%m/%Y %H:%M:%S") + ":00"
+    since_str = (since_dt or now - datetime.timedelta(days=7)).strftime("%d/%m/%Y %H:%M:%S")
+    until_str = (until_dt or now).strftime("%d/%m/%Y %H:%M:%S")
 
     base_url = "https://verifone.glassix.com/api/v1.2/tickets/list"
 
@@ -296,11 +300,13 @@ def safe_get_owner_name(owner):
         pass
     return ""
 
+
 def pick_first_available(t: dict, keys: list):
     for k in keys:
         if k in t and t[k]:
             return t[k]
     return None
+
 
 def normalize_tags(tag_value):
     try:
@@ -319,6 +325,7 @@ def normalize_tags(tag_value):
         return str(tag_value)
     except Exception:
         return ""
+
 
 def build_open_calls_df(tickets):
     rows = []
@@ -408,6 +415,7 @@ def compute_metrics(df):
         except Exception:
             per_agent_open = {}
         now = datetime.datetime.now(datetime.timezone.utc)
+
         def hours_since(dt):
             try:
                 if dt is None or pd.isna(dt):
@@ -420,6 +428,7 @@ def compute_metrics(df):
                 return max(0.0, delta.total_seconds() / 3600.0)
             except Exception:
                 return None
+
         for col in ['firstCustomer_dt', 'firstAgent_dt', 'created_dt']:
             if col not in open_df.columns:
                 open_df[col] = None
@@ -486,6 +495,7 @@ def compute_metrics(df):
             "open_df": pd.DataFrame()
         }
 
+
 def compute_snoozed_metrics(df):
     try:
         if df is None or df.empty:
@@ -515,26 +525,26 @@ def compute_snoozed_metrics(df):
         }
 
 
-
 # תשתית לבוט אינטראקטיבי
-LAST_PROCESSED_IDS = {} # מילון לפי שם קבוצה
+LAST_PROCESSED_IDS = {}  # מילון לפי שם קבוצה
+
 
 def get_whatsapp_driver():
     """מאתחל דרייבר של כרום בפורט 9223 (נפרד מה-Verint)"""
     try:
-        from selenium.webdriver.chrome.options import Options
         import subprocess
-
         import socket
+
         def is_port_open(port):
             try:
                 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                     s.settimeout(1)
                     return s.connect_ex(('127.0.0.1', port)) == 0
-            except: return False
+            except Exception:
+                return False
 
         options = Options()
-        
+
         if is_port_open(WA_DEBUG_PORT):
             log(f"[*] מזהה שפורט {WA_DEBUG_PORT} פתוח. מתחבר לוואטסאפ...")
             options.add_experimental_option("debuggerAddress", f"127.0.0.1:{WA_DEBUG_PORT}")
@@ -543,7 +553,7 @@ def get_whatsapp_driver():
             chrome_exe = r"C:\Program Files\Google\Chrome\Application\chrome.exe"
             if not os.path.exists(chrome_exe):
                 chrome_exe = r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"
-            
+
             # פרופיל נפרד למניעת נזק/התנגשות
             cmd = f'start "" "{chrome_exe}" --remote-debugging-port={WA_DEBUG_PORT} --user-data-dir="{CHROME_USER_DATA_DIR}" --profile-directory="Default" --start-maximized "https://web.whatsapp.com/"'
             subprocess.Popen(cmd, shell=True)
@@ -551,31 +561,32 @@ def get_whatsapp_driver():
             options.add_experimental_option("debuggerAddress", f"127.0.0.1:{WA_DEBUG_PORT}")
 
         driver = webdriver.Chrome(options=options)
-        
+
         if "web.whatsapp.com" not in driver.current_url:
             driver.get("https://web.whatsapp.com/")
-            
+
         log("ממתין לטעינת WhatsApp Web...")
         wait = WebDriverWait(driver, 40)
         wait.until(EC.presence_of_element_located((By.ID, "pane-side")))
         log("✅ WhatsApp Web מוכן ובחלון נפרד.")
         return driver
-            
+
     except Exception as e:
         log(f"❌ אתחול הדרייבר נכשל: {str(e)}")
         log("וודא שסגרת חלונות כרום אחרים שאינם במצב דיבאג (או תן לסקריפט לפתוח עבורך)")
         return None
 
 
-
 def clean_text_for_comparison(text):
     """מנקה טקסט מתווים בלתי נראים, סימני פיסוק ורווחים כפולים"""
-    if not text: return ""
+    if not text:
+        return ""
     chars_to_remove = ["\u200f", "\u200e", "\u202a", "\u202b", "\u202c", "\u202d", "\u202e", "\u200b"]
     for c in chars_to_remove:
         text = text.replace(c, "")
     text = text.lower().replace("!", "").replace(".", "").replace("?", "").replace(",", "").strip()
     return text
+
 
 def listen_for_commands(driver, group_name, token):
     """מאזין להודעות בקבוצה - מניעת כפילויות וזיהוי מדויק"""
@@ -590,26 +601,28 @@ def listen_for_commands(driver, group_name, token):
                 group_xpath = f'//span[@title="{group_name}"]'
                 driver.find_element(By.XPATH, group_xpath).click()
                 time.sleep(1)
-        except: 
+        except Exception:
             # אם לא גלוי או לא נמצא, ננסה לחפש ברשימת הצ'אטים
             try:
                 group_xpath = f'//span[@title="{group_name}"]'
                 el = driver.find_element(By.XPATH, group_xpath)
                 el.click()
                 time.sleep(1)
-            except: pass
+            except Exception:
+                pass
 
         # 2. חיפוש הודעות חדשות (ID לכל קבוצה בנפרד)
         last_id = LAST_PROCESSED_IDS.get(group_name)
 
         msg_xpath = '//div[@role="row"] | //div[contains(@class, "message-in")] | //div[contains(@class, "message-out")]'
         messages = driver.find_elements(By.XPATH, msg_xpath)
-        
-        if not messages: return
+
+        if not messages:
+            return
 
         latest_el = messages[-1]
         latest_id = latest_el.get_attribute("data-id") or str(hash(latest_el.text))
-        
+
         if last_id is None:
             LAST_PROCESSED_IDS[group_name] = latest_id
             return
@@ -622,20 +635,22 @@ def listen_for_commands(driver, group_name, token):
         # בודקים רק נתח קטן אחרון
         for msg_el in reversed(messages[-8:]):
             m_id = msg_el.get_attribute("data-id") or str(hash(msg_el.text))
-            if m_id == last_id: break
-            
+            if m_id == last_id:
+                break
+
             cls = msg_el.get_attribute("class") or ""
             if "message-in" in cls:
                 raw_text = msg_el.text.strip()
-                if not raw_text: continue
-                
+                if not raw_text:
+                    continue
+
                 lines = [line.strip() for line in raw_text.split("\n")]
                 commands_list = ["עזרה", "help", "סטטוס", "status", "סלא", "sla", "יומי", "daily", "בדיקה", "test"]
-                
+
                 for line in lines:
                     clean_line = clean_text_for_comparison(line)
-                    # תומך גם בפקודות עם ! וגם בלי
-                    is_cmd = any(clean_line == c or clean_line == f"!{c}" for c in commands_list)
+                    # תומך בפקודות (! כבר הוסר על ידי clean_text_for_comparison)
+                    is_cmd = any(clean_line == c for c in commands_list)
                     if is_cmd or line.startswith("!"):
                         log(f"🎯 פקודה ב-{group_name}: '{clean_line}'")
                         new_commands.append(line)
@@ -652,14 +667,16 @@ def listen_for_commands(driver, group_name, token):
         if "stale element" not in str(e).lower():
             log(f"⚠️ שגיאה במאזין: {str(e)}")
 
+
 def handle_command(driver, text, token, group_name):
     """מפענח ומבצע פקודות - תגובה תמיד לאותה קבוצה ממנה הגיעה הפקודה"""
     clean_full = clean_text_for_comparison(text)
-    if not clean_full: return
-    
+    if not clean_full:
+        return
+
     clean_cmd = clean_full.split()[0]
     log(f"⚙️ מעבד פקודה '{clean_cmd}' עבור קבוצת '{group_name}'")
-    
+
     response = None
     if clean_cmd in ["עזרה", "help"]:
         response = "🤖 *Tier 2 Bot - Commands:*\n\n▫️ *status* - Open/Snoozed report\n▫️ *sla* - Immediate SLA check\n▫️ *daily* - Daily closures summary\n▫️ *test* - Test connection"
@@ -674,19 +691,16 @@ def handle_command(driver, text, token, group_name):
         return
     elif clean_cmd in ["בדיקה", "test"]:
         response = "👋 Bot is online and listening!"
-    
 
     if response:
         send_whatsapp_message_direct(driver, group_name, response)
-
-
 
 
 def send_whatsapp_message_direct(driver, group_name, message):
     """שולח הודעה ישירות דרך הדרייבר הפתוח - גרסה חסינה במיוחד"""
     try:
         wait = WebDriverWait(driver, 15)
-        
+
         # 0. ניקוי תיבת חיפוש אם נשארו בה שאריות (בלי לזרוק שגיאה אם לא נמצא)
         try:
             search_box = driver.find_element(By.XPATH, '//div[@role="textbox" and @data-tab="3"] | //div[@contenteditable="true"][@data-tab="3"]')
@@ -694,7 +708,7 @@ def send_whatsapp_message_direct(driver, group_name, message):
                 search_box.click()
                 search_box.send_keys(Keys.CONTROL, "a")
                 search_box.send_keys(Keys.BACKSPACE)
-        except:
+        except Exception:
             pass
 
         # 1. בדיקה מדויקת אם הקבוצה הנכונה פתוחה
@@ -703,22 +717,22 @@ def send_whatsapp_message_direct(driver, group_name, message):
             header = driver.find_element(By.XPATH, '//*[@id="main"]//header')
             if group_name in header.text:
                 is_open = True
-        except:
+        except Exception:
             pass
 
         if not is_open:
             log(f"🔍 מחפש את הקבוצה '{group_name}'...")
-            
+
             # 2. ניסיון למצוא את הקבוצה ברשימת הצ'אטים (חיפוש גמיש)
             group_xpath = '//span[contains(@title, "דוחות") and contains(@title, "Tier2")]'
             try:
                 # גלילה קלה למעלה כדי לוודא שהרשימה מעודכנת
                 side_pane = driver.find_element(By.ID, "pane-side")
                 driver.execute_script("arguments[0].scrollTop = 0;", side_pane)
-                
+
                 group_el = wait.until(EC.element_to_be_clickable((By.XPATH, group_xpath)))
                 group_el.click()
-            except:
+            except Exception:
                 log(f"⚠️ קבוצה לא נמצאה ברשימה, מנסה לבצע חיפוש אקטיבי...")
                 # 3. חיפוש דרך תיבת החיפוש
                 search_xpaths = [
@@ -732,19 +746,20 @@ def send_whatsapp_message_direct(driver, group_name, message):
                     try:
                         search_box = driver.find_element(By.XPATH, sx)
                         break
-                    except: continue
-                
+                    except Exception:
+                        continue
+
                 if not search_box:
                     raise Exception("לא הצלחתי לאתר את תיבת החיפוש בוואטסאפ")
-                
+
                 search_box.click()
                 search_box.send_keys(group_name)
                 time.sleep(2)
-                
+
                 group_el = wait.until(EC.element_to_be_clickable((By.XPATH, group_xpath)))
                 group_el.click()
 
-        # 4. מציאת תיבת ההקלדה והדבקה ( Paste)
+        # 4. מציאת תיבת ההקלדה והדבקה (Paste)
         time.sleep(1)
         input_box_xpaths = [
             '//*[@id="main"]//footer//div[@contenteditable="true"][@data-tab="10"]',
@@ -752,18 +767,19 @@ def send_whatsapp_message_direct(driver, group_name, message):
             '//div[@id="main"]//div[@title="הקלדת הודעה"]',
             '//footer//div[@role="textbox"]'
         ]
-        
+
         input_box = None
         for ix in input_box_xpaths:
             try:
                 input_box = driver.find_element(By.XPATH, ix)
-                if input_box.is_displayed(): break
-            except: continue
-            
+                if input_box.is_displayed():
+                    break
+            except Exception:
+                continue
+
         if not input_box:
             raise Exception("לא נמצאה תיבת הקלדה (Input Box)")
 
-        import pyperclip
         pyperclip.copy(message)
         input_box.click()
         time.sleep(0.3)
@@ -772,10 +788,11 @@ def send_whatsapp_message_direct(driver, group_name, message):
         input_box.send_keys(Keys.ENTER)
         log("✅ הודעה נשלחה בהצלחה.")
         return True
-        
+
     except Exception as e:
         log(f"❌ שגיאה בשליחה ישירה: {str(e)}")
         return False
+
 
 def send_whatsapp_group_instant(group_id_or_name, message):
     """שליחה 'מהירה' על ידי פתיחה וסגירה של דפדפן (לגיבוי בלבד)"""
@@ -789,7 +806,6 @@ def send_whatsapp_group_instant(group_id_or_name, message):
         wait = WebDriverWait(driver, 60)
         wait.until(EC.presence_of_element_located((By.XPATH, f'//span[@title="{group_id_or_name}"]'))).click()
         input_box = wait.until(EC.presence_of_element_located((By.XPATH, '//div[@contenteditable="true"][@data-tab="10"]')))
-        import pyperclip
         pyperclip.copy(message)
         input_box.send_keys(Keys.CONTROL, "v")
         time.sleep(0.5)
@@ -798,7 +814,8 @@ def send_whatsapp_group_instant(group_id_or_name, message):
         driver.quit()
         return True, None
     except Exception as e:
-        if driver: driver.quit()
+        if driver:
+            driver.quit()
         return False, str(e)
 
 
@@ -807,15 +824,16 @@ def send_with_retries(group_name, message, driver=None):
     if driver:
         if send_whatsapp_message_direct(driver, group_name, message):
             return True
-    
+
     for i, delay in enumerate(RETRY_DELAYS, start=1):
         success, _ = send_whatsapp_group_instant(group_name, message)
-        if success: return True
+        if success:
+            return True
         time.sleep(delay)
     return False
 
-# ---------- UPDATED SLA & REPORTS ----------
 
+# ---------- UPDATED SLA & REPORTS ----------
 def check_sla_and_alert(token, group_name, driver=None):
     """בודק SLA ושולח התראה מרוכזת"""
     try:
@@ -834,14 +852,16 @@ def check_sla_and_alert(token, group_name, driver=None):
                     "hours": row.get("hours_since_first_customer", 0.0),
                     "subject": row.get("field1", "ללא")
                 })
-        if not new_violations: return
+        if not new_violations:
+            return
         msg = ["🚨 *ריכוז חריגות SLA — Tier 2*", "════════════════════"]
         for v in new_violations:
             msg.extend([f"🎫 *קריאה:* {v['id']}", f"👤 *נציג:* {v['agent']}", f"⏱ *זמן:* {v['hours']:.1f} שעות", "-------------------"])
             alerted_ticket_ids.add(v['id'])
         msg.append("\n🤖 _נשלח אוטומטית_")
         send_with_retries(group_name, "\n".join(msg), driver=driver)
-    except: log_exc("check_sla")
+    except Exception:
+        log_exc("check_sla")
 
 
 def send_hourly_report(token, group_name, driver=None):
@@ -851,7 +871,7 @@ def send_hourly_report(token, group_name, driver=None):
         now_local = datetime.datetime.now(pytz.timezone("Asia/Jerusalem"))
         total_open = len(df[df['state'] == "open"])
         total_snoozed = len(df[df['state'] == "snoozed"])
-        
+
         msg = [
             "📊 *סטטוס שעתי — Tier 2*",
             "════════════════════",
@@ -864,7 +884,7 @@ def send_hourly_report(token, group_name, driver=None):
                 msg.append(f"   ▫️ {ag}: {count}")
         else:
             msg.append("   ▫️ אין קריאות פתוחות")
-            
+
         msg.append(f"\n💤 *בממתינה (Snoozed):* {total_snoozed}")
         snoozed_agents = df[df['state'] == "snoozed"]['agent'].value_counts()
         if not snoozed_agents.empty:
@@ -873,11 +893,12 @@ def send_hourly_report(token, group_name, driver=None):
 
         msg.append("\n════════════════════")
         msg.append("🤖 _עדכון שעתי אוטומטי_")
-        
+
         send_with_retries(group_name, "\n".join(msg), driver=driver)
         log(f"דו\"ח שעתי נשלח ({now_local.strftime('%H:%M')})")
     except Exception:
         log_exc("send_hourly_report")
+
 
 def send_current_daily_summary(token, group_name, driver=None):
     """סיכום שוטף עבור פקודת 'יומי' - כולל Glassix ו-Verint"""
@@ -890,7 +911,7 @@ def send_current_daily_summary(token, group_name, driver=None):
         tickets = get_tickets(token, since=start_day, until=now_local, states=("Closed",))
         df_closed = build_open_calls_df(tickets)
         total_closed = len(df_closed)
-        
+
         msg = [
             f"📈 *סטטוס שוטף — {now_local.strftime('%d/%m/%Y %H:%M')}*",
             "════════════════════",
@@ -898,7 +919,7 @@ def send_current_daily_summary(token, group_name, driver=None):
             f"סה\"כ קריאות שנסגרו היום: *{total_closed}*",
             ""
         ]
-        
+
         if not df_closed.empty:
             for ag, count in df_closed['agent'].value_counts().items():
                 msg.append(f"   👤 {ag}: {count}")
@@ -924,6 +945,7 @@ def send_current_daily_summary(token, group_name, driver=None):
     except Exception:
         log_exc("send_current_daily_summary")
 
+
 def send_daily_report(token, group_name, driver=None):
     """דוח סוף יום משולב: Glassix + Verint"""
     try:
@@ -935,7 +957,7 @@ def send_daily_report(token, group_name, driver=None):
         tickets = get_tickets(token, since=start_day, until=now_local, states=("Closed",))
         df_closed = build_open_calls_df(tickets)
         total_closed = len(df_closed)
-        
+
         msg = [
             f"🏁 *סיכום סוף יום — {now_local.strftime('%d/%m/%Y')}*",
             "════════════════════",
@@ -943,7 +965,7 @@ def send_daily_report(token, group_name, driver=None):
             f"סה\"כ קריאות שנסגרו היום: *{total_closed}*",
             ""
         ]
-        
+
         if not df_closed.empty:
             for ag, count in df_closed['agent'].value_counts().items():
                 msg.append(f"   👤 {ag}: {count}")
@@ -979,29 +1001,31 @@ def send_daily_report(token, group_name, driver=None):
     except Exception:
         log_exc("send_daily_report")
 
+
 def send_weekly_report(token, group_name, driver=None):
     """דוח שבועי מעוצב ומקצועי (א-ו)"""
     try:
         tz = pytz.timezone("Asia/Jerusalem")
         now = datetime.datetime.now(tz)
-        
+
         # תחילת שבוע: ראשון 00:00
         days_since_sunday = (now.weekday() + 1) % 7
         start_of_week = (now - datetime.timedelta(days=days_since_sunday)).replace(hour=0, minute=0, second=0, microsecond=0)
-        
+
         tickets = get_tickets(token, since=start_of_week, until=now, states=("Closed",))
         df = build_open_calls_df(tickets)
         if 'closed_dt' in df.columns:
             df = df[df['closed_dt'].notna()]
-            
+
         total_closed = len(df)
-        if total_closed == 0: return
-        
+        if total_closed == 0:
+            return
+
         sla_met = df[df['sla_met'] == True].shape[0] if 'sla_met' in df.columns else 0
-        sla_pct = round((sla_met / total_closed) * 100, 1)
+        sla_pct = round((sla_met / total_closed) * 100, 1) if total_closed > 0 else 0.0
         fcr_met = df[df['first_contact_resolved'] == True].shape[0] if 'first_contact_resolved' in df.columns else 0
-        fcr_pct = round((fcr_met / total_closed) * 100, 1)
-        
+        fcr_pct = round((fcr_met / total_closed) * 100, 1) if total_closed > 0 else 0.0
+
         msg = [
             f"📅 *סיכום שבועי — {start_of_week.strftime('%d/%m')} עד {now.strftime('%d/%m')}*",
             "══════════════════════",
@@ -1012,20 +1036,21 @@ def send_weekly_report(token, group_name, driver=None):
             "",
             "👥 *ביצועי נציגים*",
         ]
-        
+
         for ag, count in df['agent'].value_counts().items():
             msg.append(f"   👤 {ag}: {count} סגירות")
-            
+
         msg.extend([
             "",
             "══════════════════════",
             "🚀 שבוע מצוין לכולם!",
             "🤖 _עדכון שבועי אוטומטי_"
         ])
-        
+
         send_with_retries(group_name, "\n".join(msg), driver=driver)
     except Exception:
         log_exc("send_weekly_report")
+
 
 def send_monthly_report(token, group_name, start_date, end_date, driver=None):
     """דוח חודשי מעוצב"""
@@ -1033,7 +1058,8 @@ def send_monthly_report(token, group_name, start_date, end_date, driver=None):
         tickets = get_tickets(token, since=start_date, until=end_date, states=("Closed",))
         df = build_open_calls_df(tickets)
         total = len(df)
-        if total == 0: return
+        if total == 0:
+            return
 
         msg = [
             f"📑 *סיכום חודשי — {start_date.strftime('%m/%Y')}*",
@@ -1041,12 +1067,12 @@ def send_monthly_report(token, group_name, start_date, end_date, driver=None):
             f"סה\"כ סגירות בחודש: *{total}*",
             ""
         ]
-        
+
         top_agents = df['agent'].value_counts().head(3)
         msg.append("🏆 *מובילים החודש:*")
         for ag, count in top_agents.items():
             msg.append(f"   🥇 {ag}: {count} סגירות")
-            
+
         msg.extend([
             "\n════════════════════",
             "🤖 _עדכון חודשי אוטומטי_"
@@ -1055,24 +1081,34 @@ def send_monthly_report(token, group_name, start_date, end_date, driver=None):
     except Exception:
         log_exc("send_monthly_report")
 
+
 def is_weekend_block_time():
     tz = pytz.timezone("Asia/Jerusalem")
     now = datetime.datetime.now(tz)
     wd = now.weekday()
-    if wd == 4 and now.hour >= 15: return True # שישי אחרי 15:00
-    if wd == 5: return True # שבת
-    if wd == 6 and now.hour < 8: return True # ראשון לפני 08:00
+    if wd == 4 and now.hour >= 15:
+        return True  # שישי אחרי 15:00
+    if wd == 5:
+        return True  # שבת
+    if wd == 6 and now.hour < 8:
+        return True  # ראשון לפני 08:00
     return False
+
 
 # ---------- VERINT HELPERS ----------
 def process_duration(dur_str):
     try:
-        if pd.isna(dur_str): return 0
+        if pd.isna(dur_str):
+            return 0
         parts = str(dur_str).split(':')
-        if len(parts) == 3: return int(parts[0])*3600 + int(parts[1])*60 + int(parts[2])
-        if len(parts) == 2: return int(parts[0])*60 + int(parts[1])
+        if len(parts) == 3:
+            return int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
+        if len(parts) == 2:
+            return int(parts[0]) * 60 + int(parts[1])
         return 0
-    except: return 0
+    except Exception:
+        return 0
+
 
 def analyze_verint_daily(date_obj):
     csv_filename = f"Verint_Today_{date_obj.strftime('%Y%m%d')}.csv"
@@ -1085,11 +1121,12 @@ def analyze_verint_daily(date_obj):
         # ניקוי מספרי טלפון כפי שנעשה ב-Combined_Reporter
         df['ani_clean'] = df['Dialed From (ANI)'].astype(str).str.replace('+', '', regex=False)
         df['dnis_clean'] = df['Dialed To (DNIS)'].astype(str).str.replace('+', '', regex=False)
-        
+
         df['Start Time'] = pd.to_datetime(df['Start Time'], dayfirst=True, errors='coerce')
         df = df[df['Start Time'].dt.date == date_obj.date()].dropna(subset=['Start Time'])
-        if df.empty: return None
-        
+        if df.empty:
+            return None
+
         # פילוח יעד (DNIS/ANI)
         vico = len(df[df['ani_clean'] == '97239029740'])
         tier1 = len(df[df['dnis_clean'] == '97239029740'])
@@ -1099,7 +1136,8 @@ def analyze_verint_daily(date_obj):
         def clean_name(n):
             raw = str(n).strip()
             # שימוש במיפוי הקיים
-            if raw in TIER2_MAP: return TIER2_MAP[raw]
+            if raw in TIER2_MAP:
+                return TIER2_MAP[raw]
             if ',' in raw:
                 p = raw.split(',')
                 # הופכת 'Isakov, Moshe' ל-'Moshe Isakov' ואז בודקת שוב במיפוי
@@ -1109,7 +1147,7 @@ def analyze_verint_daily(date_obj):
 
         agent_stats = {clean_name(k): v for k, v in df.groupby('Employee').size().to_dict().items()}
         return {
-            "total_calls": len(df), 
+            "total_calls": len(df),
             "agent_stats": agent_stats,
             "vico": vico,
             "tier1": tier1,
@@ -1128,7 +1166,7 @@ def monitor_loop(group_name):
     last_daily_report_date = None
     last_weekly_report_date = None
     last_monthly_report_month = None
-    last_scheduled_minute = None
+    last_sla_check = None
 
     # אתחול ראשוני
     driver = get_whatsapp_driver()
@@ -1143,10 +1181,12 @@ def monitor_loop(group_name):
                     # בדיקה פשוטה אם הדפדפן מגיב
                     _ = driver.current_url
                     driver_alive = True
-                except:
+                except Exception:
                     log("⚠️ זוהתה קריסה/סגירה של הדפדפן. מנסה לאתחל מחדש...")
-                    try: driver.quit()
-                    except: pass
+                    try:
+                        driver.quit()
+                    except Exception:
+                        pass
                     driver = None
 
             if not driver_alive:
@@ -1162,60 +1202,50 @@ def monitor_loop(group_name):
             minute = now.minute
             weekday = now.weekday()
             today = now.date()
-            current_time_key = (today, hour, minute)
 
             # ===== האזנה לפקודות (קבוצת הבוט הייעודית) =====
             listen_for_commands(driver, BOT_GROUP, token)
 
-            # מניעת הרצת דוחות מרובת פעמים באותה דקה
-            is_new_minute = (current_time_key != last_scheduled_minute)
-
             # ===== SLA (בדיקה כל 5 דקות - קבוצת הדוחות) =====
-            if minute % 5 == 0 and is_new_minute: 
+            if minute % 5 == 0 and (today, hour, minute) != last_sla_check:
                 if 8 <= hour < 19 and not is_weekend_block_time():
                     check_sla_and_alert(token, REPORTS_GROUP, driver=driver)
-                    last_scheduled_minute = current_time_key
+                last_sla_check = (today, hour, minute)
 
             # ===== דו"ח שעתי (קבוצת הדוחות) =====
-            if not is_weekend_block_time() and is_new_minute:
+            if not is_weekend_block_time():
                 if last_hourly_report_hour is None and 8 <= hour <= 19:
                     log(f"שולח דו\"ח שעתי ראשון ({hour:02d}:{minute:02d})...")
                     send_hourly_report(token, REPORTS_GROUP, driver=driver)
                     last_hourly_report_hour = hour
-                    last_scheduled_minute = current_time_key
                 elif hour == 19 and minute == 0 and last_hourly_report_hour != 19:
                     log("שעה 19:00 — שולח דו\"ח שעתי האחרון להיום.")
                     send_hourly_report(token, REPORTS_GROUP, driver=driver)
                     last_hourly_report_hour = 19
-                    last_scheduled_minute = current_time_key
                 elif 8 <= hour < 19 and minute == 0 and last_hourly_report_hour != hour:
                     log(f"שעה עגולה {hour:02d}:00 — שולח דו\"ח שעתי.")
                     send_hourly_report(token, REPORTS_GROUP, driver=driver)
                     last_hourly_report_hour = hour
-                    last_scheduled_minute = current_time_key
 
             # ===== דו"ח יומי (סוף יום - קבוצת הדוחות) =====
-            if hour == 19 and minute == 0 and last_daily_report_date != today and is_new_minute:
+            if hour == 19 and minute == 0 and last_daily_report_date != today:
                 log("שעה 19:00 — שולח דו\"ח סוף יום משולב.")
                 send_daily_report(token, REPORTS_GROUP, driver=driver)
                 last_daily_report_date = today
-                last_scheduled_minute = current_time_key
 
             # ===== דו"ח שבועי (קבוצת הדוחות) =====
-            if weekday == 4 and hour == 14 and minute == 0 and last_weekly_report_date != today and is_new_minute:
+            if weekday == 4 and hour == 14 and minute == 0 and last_weekly_report_date != today:
                 log("שולח דו\"ח שבועי (שישי 14:00).")
                 send_weekly_report(token, REPORTS_GROUP, driver=driver)
                 last_weekly_report_date = today
-                last_scheduled_minute = current_time_key
 
             # ===== דו"ח חודשי (קבוצת הדוחות) =====
-            if today.day == 1 and hour == 8 and minute == 15 and last_monthly_report_month != now.month and is_new_minute:
+            if today.day == 1 and hour == 8 and minute == 15 and last_monthly_report_month != now.month:
                 log("שולח דו\"ח חודשי (1 לחודש ב-08:15).")
                 prev_month_last_day = today.replace(day=1) - datetime.timedelta(days=1)
                 prev_month_first_day = prev_month_last_day.replace(day=1)
                 send_monthly_report(token, REPORTS_GROUP, prev_month_first_day, prev_month_last_day, driver=driver)
                 last_monthly_report_month = now.month
-                last_scheduled_minute = current_time_key
 
         except Exception as e:
             msg = str(e)
@@ -1225,10 +1255,10 @@ def monitor_loop(group_name):
             else:
                 log_exc("שגיאה בלולאת המעקב הראשית")
 
-        time.sleep(10) # בדיקה כל 10 שניות לטובת אינטראקטיביות
+        time.sleep(10)  # בדיקה כל 10 שניות לטובת אינטראקטיביות
 
 
-# ---------- ENTRY ----------
+# ---------- MAIN ----------
 if __name__ == "__main__":
     try:
         # מפעיל ריענון טוקן ברקע
