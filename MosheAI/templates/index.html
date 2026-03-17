@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MosheAI — עוזר חכם לדוחות ושקופיות</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+/* ══════════ RESET & BASE ══════════ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg:        #080b12;
+  --card:      #0f1420;
+  --card2:     #141926;
+  --border:    #1e2a40;
+  --border2:   #263450;
+  --p1:        #7c3aed;
+  --p2:        #6d28d9;
+  --p3:        #4c1d95;
+  --blue:      #2563eb;
+  --teal:      #0891b2;
+  --green:     #059669;
+  --orange:    #d97706;
+  --red:       #dc2626;
+  --text:      #e2e8f0;
+  --muted:     #8b99b5;
+  --dim:       #4b5673;
+  --glow:      rgba(124,58,237,0.35);
+  --radius:    12px;
+  --shadow:    0 4px 24px rgba(0,0,0,0.5);
+}
+html, body { height: 100%; font-family: 'Heebo', sans-serif; background: var(--bg); color: var(--text); overflow: hidden; }
+
+/* ══════════ SCROLLBAR ══════════ */
+::-webkit-scrollbar       { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: var(--dim); }
+
+/* ══════════ LAYOUT ══════════ */
+#app { display: grid; grid-template-rows: 60px 1fr; grid-template-columns: 1fr 380px; height: 100vh; gap: 0; }
+#header       { grid-column: 1 / -1; background: var(--card); border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 20px; gap: 16px; z-index: 10; }
+#chat-section { grid-column: 1; display: flex; flex-direction: column; border-left: 1px solid var(--border); overflow: hidden; }
+#side-section { grid-column: 2; display: flex; flex-direction: column; overflow: hidden; background: var(--card); }
+
+/* ══════════ HEADER ══════════ */
+.logo { display: flex; align-items: center; gap: 10px; }
+.logo-icon { width: 36px; height: 36px; background: linear-gradient(135deg, var(--p1), var(--blue)); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; box-shadow: 0 0 16px var(--glow); }
+.logo-text { font-size: 20px; font-weight: 800; background: linear-gradient(90deg, #a78bfa, #60a5fa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.logo-sub { font-size: 11px; color: var(--muted); font-weight: 400; -webkit-text-fill-color: var(--muted); }
+.header-stats { margin-right: auto; display: flex; gap: 12px; }
+.stat-pill { background: var(--card2); border: 1px solid var(--border); border-radius: 20px; padding: 4px 12px; font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 5px; }
+.stat-pill span { color: var(--text); font-weight: 600; }
+.api-badge { padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+.api-ok  { background: rgba(5,150,105,0.15); border: 1px solid rgba(5,150,105,0.4); color: #34d399; }
+.api-bad { background: rgba(220,38,38,0.15); border: 1px solid rgba(220,38,38,0.4); color: #f87171; }
+
+/* ══════════ CHAT SECTION ══════════ */
+#messages { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 16px; scroll-behavior: smooth; }
+#input-area { padding: 16px 20px; border-top: 1px solid var(--border); background: var(--card); }
+.input-wrap { display: flex; gap: 10px; align-items: flex-end; background: var(--card2); border: 1px solid var(--border2); border-radius: var(--radius); padding: 10px 14px; transition: border-color 0.2s, box-shadow 0.2s; }
+.input-wrap:focus-within { border-color: var(--p1); box-shadow: 0 0 0 3px var(--glow); }
+#msg-input { flex: 1; background: transparent; border: none; outline: none; color: var(--text); font-family: inherit; font-size: 14px; resize: none; max-height: 120px; line-height: 1.6; direction: rtl; }
+#msg-input::placeholder { color: var(--dim); }
+#send-btn { background: linear-gradient(135deg, var(--p1), var(--blue)); border: none; border-radius: 8px; width: 38px; height: 38px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: transform 0.15s, opacity 0.2s; flex-shrink: 0; }
+#send-btn:hover:not(:disabled) { transform: scale(1.08); }
+#send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+#send-btn svg { width: 18px; height: 18px; fill: white; }
+
+/* ══════════ EXAMPLE PROMPTS ══════════ */
+#examples { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.ex-chip { background: var(--card2); border: 1px solid var(--border); border-radius: 20px; padding: 5px 12px; font-size: 12px; color: var(--muted); cursor: pointer; transition: all 0.2s; white-space: nowrap; }
+.ex-chip:hover { border-color: var(--p1); color: var(--p1); background: rgba(124,58,237,0.1); }
+
+/* ══════════ MESSAGE BUBBLES ══════════ */
+.msg { display: flex; gap: 10px; animation: fadeIn 0.3s ease; max-width: 100%; }
+.msg.user { flex-direction: row-reverse; }
+.msg-avatar { width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; }
+.msg.user  .msg-avatar { background: linear-gradient(135deg, var(--p1), var(--blue)); color: white; }
+.msg.ai    .msg-avatar { background: linear-gradient(135deg, var(--teal), var(--green)); color: white; font-size: 12px; }
+.msg-body { max-width: 85%; display: flex; flex-direction: column; gap: 4px; }
+.msg.user  .msg-body { align-items: flex-end; }
+.msg.ai    .msg-body { align-items: flex-start; }
+.msg-bubble { background: var(--card2); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 16px; font-size: 14px; line-height: 1.7; white-space: pre-wrap; word-break: break-word; }
+.msg.user .msg-bubble { background: linear-gradient(135deg, rgba(124,58,237,0.25), rgba(37,99,235,0.2)); border-color: rgba(124,58,237,0.4); }
+.msg-time { font-size: 10px; color: var(--dim); padding: 0 4px; }
+
+/* ══════════ THINKING ══════════ */
+.thinking-card { background: rgba(124,58,237,0.08); border: 1px solid rgba(124,58,237,0.25); border-radius: var(--radius); padding: 10px 14px; font-size: 12px; color: #a78bfa; display: flex; align-items: flex-start; gap: 8px; max-width: 85%; }
+.thinking-pulse { width: 8px; height: 8px; border-radius: 50%; background: #a78bfa; flex-shrink: 0; margin-top: 4px; animation: pulse 1.2s infinite; }
+.thinking-text { opacity: 0.8; overflow: hidden; max-height: 60px; font-style: italic; line-height: 1.5; }
+
+/* ══════════ TOOL CARDS ══════════ */
+.tool-card { background: var(--card2); border: 1px solid var(--border2); border-radius: var(--radius); padding: 10px 14px; display: flex; align-items: center; gap: 10px; font-size: 13px; min-width: 240px; }
+.tool-card.running { border-color: rgba(124,58,237,0.5); box-shadow: 0 0 12px rgba(124,58,237,0.15); }
+.tool-card.done    { border-color: rgba(5,150,105,0.5); }
+.tool-card.error   { border-color: rgba(220,38,38,0.4); }
+.tool-icon { font-size: 20px; }
+.tool-info { flex: 1; }
+.tool-name  { font-weight: 600; color: var(--text); }
+.tool-status { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.spinner { width: 18px; height: 18px; border: 2px solid var(--border2); border-top-color: var(--p1); border-radius: 50%; animation: spin 0.8s linear infinite; flex-shrink: 0; }
+.checkmark { color: #34d399; font-size: 18px; }
+
+/* ══════════ FILE CARDS ══════════ */
+.file-card { background: var(--card2); border: 1px solid var(--border2); border-radius: var(--radius); overflow: hidden; transition: transform 0.2s, box-shadow 0.2s; }
+.file-card:hover { transform: translateY(-2px); box-shadow: var(--shadow); }
+.file-card.pptx { border-color: rgba(37,99,235,0.4); }
+.file-card.docx { border-color: rgba(8,145,178,0.4); }
+.file-card.png  { border-color: rgba(5,150,105,0.4); }
+.file-header { display: flex; align-items: center; gap: 10px; padding: 12px 14px; }
+.file-ext { width: 36px; height: 36px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; letter-spacing: -0.5px; flex-shrink: 0; }
+.file-ext.pptx { background: rgba(37,99,235,0.2); color: #60a5fa; }
+.file-ext.docx { background: rgba(8,145,178,0.2); color: #22d3ee; }
+.file-ext.png  { background: rgba(5,150,105,0.2); color: #34d399; }
+.file-meta { flex: 1; overflow: hidden; }
+.file-name { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.file-size { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.file-dl { background: var(--border); border: none; border-radius: 6px; padding: 5px 10px; font-size: 11px; color: var(--text); cursor: pointer; font-family: inherit; transition: all 0.2s; white-space: nowrap; }
+.file-dl:hover { background: var(--p1); }
+.file-preview { max-width: 100%; display: block; border-top: 1px solid var(--border); }
+.inline-img { max-width: 100%; border-radius: 0 0 var(--radius) var(--radius); display: block; }
+
+/* ══════════ SIDE PANEL ══════════ */
+.side-tabs { display: flex; border-bottom: 1px solid var(--border); }
+.side-tab { flex: 1; padding: 12px; font-size: 13px; font-weight: 600; text-align: center; cursor: pointer; color: var(--muted); border-bottom: 2px solid transparent; transition: all 0.2s; }
+.side-tab.active { color: var(--p1); border-bottom-color: var(--p1); }
+.tab-content { display: none; flex: 1; overflow-y: auto; padding: 16px; }
+.tab-content.active { display: flex; flex-direction: column; gap: 12px; }
+
+/* ══════════ FILES LIST ══════════ */
+.files-list { display: flex; flex-direction: column; gap: 8px; }
+.empty-state { text-align: center; color: var(--dim); font-size: 13px; padding: 40px 20px; }
+.empty-icon { font-size: 40px; margin-bottom: 12px; }
+.refresh-btn { background: var(--card2); border: 1px solid var(--border); border-radius: 8px; padding: 6px 14px; color: var(--muted); font-family: inherit; font-size: 12px; cursor: pointer; transition: all 0.2s; }
+.refresh-btn:hover { border-color: var(--p1); color: var(--p1); }
+
+/* ══════════ MEMORY PANEL ══════════ */
+.memory-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 16px; }
+.mem-stat { background: var(--card2); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; text-align: center; }
+.mem-stat-num { font-size: 24px; font-weight: 800; }
+.mem-stat-num.total   { color: #60a5fa; }
+.mem-stat-num.success { color: #34d399; }
+.mem-stat-num.failed  { color: #f87171; }
+.mem-stat-label { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.mem-section { background: var(--card2); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; }
+.mem-section-title { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px; }
+.mem-item { display: flex; gap: 8px; align-items: flex-start; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 12px; }
+.mem-item:last-child { border-bottom: none; }
+.mem-item-dot { width: 6px; height: 6px; border-radius: 50%; margin-top: 5px; flex-shrink: 0; }
+.dot-success { background: #34d399; }
+.dot-error   { background: #f87171; }
+.mem-item-text { flex: 1; color: var(--muted); line-height: 1.4; }
+.mem-item-task { color: var(--text); font-weight: 500; display: block; margin-bottom: 2px; }
+.mem-item-err  { color: #fca5a5; display: block; font-size: 11px; }
+
+/* ══════════ ANIMATIONS ══════════ */
+@keyframes fadeIn  { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes spin    { to { transform: rotate(360deg); } }
+@keyframes pulse   { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+@keyframes blink   { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+
+/* ══════════ CURSOR BLINK ══════════ */
+.cursor::after { content: "▋"; animation: blink 1s infinite; color: var(--p1); font-size: 12px; }
+
+/* ══════════ WELCOME ══════════ */
+.welcome { text-align: center; padding: 40px 20px; }
+.welcome-icon { font-size: 56px; margin-bottom: 16px; filter: drop-shadow(0 0 20px rgba(124,58,237,0.5)); }
+.welcome-title { font-size: 22px; font-weight: 800; background: linear-gradient(90deg, #a78bfa, #60a5fa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 8px; }
+.welcome-sub { font-size: 14px; color: var(--muted); margin-bottom: 28px; line-height: 1.6; }
+.welcome-chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+
+/* ══════════ API WARN ══════════ */
+.api-warn { background: rgba(220,38,38,0.1); border: 1px solid rgba(220,38,38,0.35); border-radius: var(--radius); padding: 14px 16px; font-size: 13px; color: #fca5a5; margin: 16px; }
+.api-warn code { background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 4px; font-size: 11px; direction: ltr; display: inline-block; margin-top: 4px; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ═══ HEADER ═══ -->
+  <header id="header">
+    <div class="logo">
+      <div class="logo-icon">🤖</div>
+      <div>
+        <div class="logo-text">MosheAI</div>
+        <div class="logo-sub">עוזר חכם לדוחות, שקופיות וסטטיסטיקה</div>
+      </div>
+    </div>
+    <div class="header-stats" id="header-stats">
+      <div class="stat-pill">✅ הצלחות: <span id="stat-ok">0</span></div>
+      <div class="stat-pill">📋 משימות: <span id="stat-total">0</span></div>
+    </div>
+    <div class="api-badge {{ 'api-ok' if api_key_set else 'api-bad' }}">
+      {{ '✅ API מחובר' if api_key_set else '❌ API KEY חסר' }}
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;margin-right:8px">
+      <span style="font-size:13px;color:var(--muted)">👤 {{ username }}</span>
+      <a href="/logout" style="background:rgba(220,38,38,0.15);border:1px solid rgba(220,38,38,0.35);border-radius:8px;padding:5px 12px;font-size:12px;color:#f87171;text-decoration:none;font-family:inherit;transition:all 0.2s" onmouseover="this.style.background='rgba(220,38,38,0.3)'" onmouseout="this.style.background='rgba(220,38,38,0.15)'">יציאה</a>
+    </div>
+  </header>
+
+  <!-- ═══ CHAT ═══ -->
+  <section id="chat-section">
+    {% if not api_key_set %}
+    <div class="api-warn">
+      ⚠️ ANTHROPIC_API_KEY לא מוגדר. פתח CMD והרץ:<br>
+      <code>set ANTHROPIC_API_KEY=sk-ant-api03-...</code><br>
+      ואז הפעל מחדש את התוכנה.
+    </div>
+    {% endif %}
+
+    <div id="messages">
+      <div class="welcome">
+        <div class="welcome-icon">🤖</div>
+        <div class="welcome-title">שלום! אני MosheAI</div>
+        <div class="welcome-sub">אני יכול ליצור מצגות PowerPoint, דוחות Word,<br>גרפים סטטיסטיים ולנתח נתונים עבורך.</div>
+        <div class="welcome-chips" id="quick-chips"></div>
+      </div>
+    </div>
+
+    <div id="input-area">
+      <div id="examples"></div>
+      <div class="input-wrap">
+        <textarea id="msg-input" placeholder="בקש ממני ליצור מצגת, דוח, גרף או ניתוח נתונים..." rows="1"></textarea>
+        <button id="send-btn" title="שלח">
+          <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ SIDE PANEL ═══ -->
+  <aside id="side-section">
+    <div class="side-tabs">
+      <div class="side-tab active" onclick="switchTab('files')">📁 קבצים</div>
+      <div class="side-tab" onclick="switchTab('memory')">🧠 זיכרון</div>
+    </div>
+    <div id="tab-files" class="tab-content active">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+        <span style="font-size:12px;color:var(--muted)">קבצים שנוצרו</span>
+        <button class="refresh-btn" onclick="loadFiles()">↻ רענן</button>
+      </div>
+      <div id="files-list" class="files-list"></div>
+    </div>
+    <div id="tab-memory" class="tab-content">
+      <div class="memory-grid">
+        <div class="mem-stat"><div class="mem-stat-num total"  id="m-total">0</div><div class="mem-stat-label">סה״כ</div></div>
+        <div class="mem-stat"><div class="mem-stat-num success" id="m-ok">0</div><div class="mem-stat-label">הצלחות</div></div>
+        <div class="mem-stat"><div class="mem-stat-num failed"  id="m-fail">0</div><div class="mem-stat-label">כישלונות</div></div>
+      </div>
+      <div class="mem-section" id="mem-sessions"><div class="mem-section-title">פעילות אחרונה</div></div>
+      <div class="mem-section" id="mem-errors"  ><div class="mem-section-title">טעויות וכשלים</div></div>
+    </div>
+  </aside>
+</div>
+
+<script>
+// ══════════════════════════════════════════════
+//  STATE
+// ══════════════════════════════════════════════
+const EXAMPLES = [
+  "צור מצגת מקצועית בנושא ביצועי מכירות רבעון 1",
+  "כתוב דוח Word על מצב מלאי המחסן",
+  "צור גרף עמודות: ינואר=120, פברואר=95, מרץ=140, אפריל=165",
+  "צור גרף עוגה של חלוקת לקוחות לפי אזורים: דרום=30, מרכז=45, צפון=25",
+  "צור מצגת על מגמות AI ב-2024 עם 5 שקופיות",
+  "הכן דוח שנתי לחברה עם 4 חלקים ומספרי ביצוע"
+];
+
+let isStreaming = false;
+
+// ══════════════════════════════════════════════
+//  INIT
+// ══════════════════════════════════════════════
+document.addEventListener("DOMContentLoaded", () => {
+  renderExamples();
+  loadFiles();
+  loadMemory();
+  autoResizeInput();
+  setupKeyboard();
+});
+
+function renderExamples() {
+  const chips = document.getElementById("quick-chips");
+  const ex    = document.getElementById("examples");
+  EXAMPLES.forEach(e => {
+    const chip = document.createElement("div");
+    chip.className = "ex-chip";
+    chip.textContent = e;
+    chip.onclick = () => { document.getElementById("msg-input").value = e; sendMessage(); };
+    chips.appendChild(chip.cloneNode(true));
+    const chip2 = chip.cloneNode(true);
+    chip2.onclick = () => { document.getElementById("msg-input").value = e; sendMessage(); };
+    ex.appendChild(chip2);
+  });
+}
+
+function autoResizeInput() {
+  const t = document.getElementById("msg-input");
+  t.addEventListener("input", () => {
+    t.style.height = "auto";
+    t.style.height = Math.min(t.scrollHeight, 120) + "px";
+  });
+}
+
+function setupKeyboard() {
+  document.getElementById("msg-input").addEventListener("keydown", e => {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+  });
+  document.getElementById("send-btn").onclick = sendMessage;
+}
+
+// ══════════════════════════════════════════════
+//  SEND
+// ══════════════════════════════════════════════
+async function sendMessage() {
+  if (isStreaming) return;
+  const input = document.getElementById("msg-input");
+  const text  = input.value.trim();
+  if (!text) return;
+
+  input.value = "";
+  input.style.height = "auto";
+  isStreaming = true;
+  document.getElementById("send-btn").disabled = true;
+
+  // הסר welcome
+  const welcome = document.querySelector(".welcome");
+  if (welcome) welcome.remove();
+
+  appendUserMsg(text);
+  const aiEl = appendAIMsg();
+  scrollBottom();
+
+  let thinking = null;
+  let textEl   = null;
+  let hasThinked = false;
+
+  try {
+    const resp = await fetch("/api/chat", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ message: text })
+    });
+
+    const reader   = resp.body.getReader();
+    const decoder  = new TextDecoder();
+    let   buf      = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buf += decoder.decode(value, { stream: true });
+      const lines = buf.split("\n\n");
+      buf = lines.pop() || "";
+
+      for (const line of lines) {
+        if (!line.startsWith("data:")) continue;
+        let chunk;
+        try { chunk = JSON.parse(line.slice(5).trim()); } catch { continue; }
+
+        switch (chunk.type) {
+
+          case "thinking":
+            if (!thinking) {
+              thinking = addThinkingCard(aiEl);
+              hasThinked = true;
+            }
+            updateThinking(thinking, chunk.content);
+            break;
+
+          case "thinking_done":
+            if (thinking) { thinking.classList.add("done"); }
+            break;
+
+          case "text":
+            if (!textEl) {
+              if (thinking) {
+                thinking.querySelector(".thinking-pulse").style.display = "none";
+              }
+              textEl = addTextBubble(aiEl);
+            }
+            appendText(textEl, chunk.content);
+            scrollBottom();
+            break;
+
+          case "tool_start":
+            addToolCard(aiEl, chunk.tool, chunk.label, "running");
+            break;
+
+          case "tool_done":
+            updateToolDone(aiEl, chunk.tool, chunk.result);
+            if (chunk.result && chunk.result.filename) {
+              addFileCard(aiEl, chunk.result);
+            }
+            loadFiles();
+            break;
+
+          case "error":
+            if (!textEl) textEl = addTextBubble(aiEl);
+            appendText(textEl, "❌ " + chunk.content);
+            break;
+
+          case "done":
+            finalizeText(textEl);
+            loadFiles();
+            loadMemory();
+            break;
+        }
+      }
+    }
+  } catch(e) {
+    if (!textEl) textEl = addTextBubble(aiEl);
+    appendText(textEl, "❌ שגיאת רשת: " + e.message);
+  }
+
+  finalizeText(textEl);
+  isStreaming = false;
+  document.getElementById("send-btn").disabled = false;
+  scrollBottom();
+}
+
+// ══════════════════════════════════════════════
+//  DOM HELPERS
+// ══════════════════════════════════════════════
+function appendUserMsg(text) {
+  const msgs = document.getElementById("messages");
+  const div  = document.createElement("div");
+  div.className = "msg user";
+  div.innerHTML = `
+    <div class="msg-avatar">M</div>
+    <div class="msg-body">
+      <div class="msg-bubble">${esc(text)}</div>
+      <div class="msg-time">${time()}</div>
+    </div>`;
+  msgs.appendChild(div);
+}
+
+function appendAIMsg() {
+  const msgs = document.getElementById("messages");
+  const div  = document.createElement("div");
+  div.className = "msg ai";
+  div.innerHTML = `
+    <div class="msg-avatar" style="font-size:16px">🤖</div>
+    <div class="msg-body" id="ai-body-${Date.now()}"></div>`;
+  msgs.appendChild(div);
+  return div.querySelector(".msg-body");
+}
+
+function addThinkingCard(parent) {
+  const card = document.createElement("div");
+  card.className = "thinking-card";
+  card.innerHTML = `<div class="thinking-pulse"></div><div class="thinking-text">חושב...</div>`;
+  parent.appendChild(card);
+  return card;
+}
+
+function updateThinking(card, content) {
+  const t = card.querySelector(".thinking-text");
+  t.textContent = content.slice(-150);
+}
+
+function addTextBubble(parent) {
+  const bubble = document.createElement("div");
+  bubble.className = "msg-bubble cursor";
+  parent.appendChild(bubble);
+  return bubble;
+}
+
+function appendText(el, text) {
+  el.textContent += text;
+}
+
+function finalizeText(el) {
+  if (el) el.classList.remove("cursor");
+  const timeEl = document.createElement("div");
+  timeEl.className = "msg-time";
+  timeEl.textContent = time();
+  const parent = el && el.parentElement;
+  if (parent) parent.appendChild(timeEl);
+}
+
+function addToolCard(parent, tool, label, state) {
+  const card = document.createElement("div");
+  card.className = `tool-card ${state}`;
+  card.id = `tool-${tool}-${Date.now()}`;
+  const icons = { create_presentation: "📊", create_word_report: "📄", create_chart: "📈", recall_memory: "🧠" };
+  card.innerHTML = `
+    <div class="tool-icon">${icons[tool] || "🔧"}</div>
+    <div class="tool-info">
+      <div class="tool-name">${esc(label)}</div>
+      <div class="tool-status">מעבד...</div>
+    </div>
+    <div class="spinner"></div>`;
+  parent.appendChild(card);
+  return card;
+}
+
+function updateToolDone(parent, tool, result) {
+  const cards = parent.querySelectorAll(".tool-card.running");
+  cards.forEach(card => {
+    if (card.querySelector(".tool-name") &&
+        card.querySelector(".tool-name").textContent) {
+      card.classList.remove("running");
+      if (result && result.error) {
+        card.classList.add("error");
+        card.querySelector(".tool-status").textContent = "❌ " + result.error.slice(0, 60);
+      } else {
+        card.classList.add("done");
+        card.querySelector(".tool-status").textContent =
+          result && result.path ? `✅ נשמר: ${result.filename}` : "✅ הושלם";
+      }
+      const spinner = card.querySelector(".spinner");
+      if (spinner) spinner.remove();
+    }
+  });
+}
+
+function addFileCard(parent, result) {
+  const type = result.type || "png";
+  const card = document.createElement("div");
+  card.className = `file-card ${type}`;
+
+  const extLabels = { pptx: "PPT", docx: "DOC", png: "PNG" };
+  const ext = extLabels[type] || type.toUpperCase();
+
+  card.innerHTML = `
+    <div class="file-header">
+      <div class="file-ext ${type}">${ext}</div>
+      <div class="file-meta">
+        <div class="file-name">${esc(result.filename)}</div>
+        <div class="file-size">נוצר כעת</div>
+      </div>
+      <button class="file-dl" onclick="dlFile('${esc(result.filename)}')">⬇ הורד</button>
+    </div>
+    ${type === "png" && result.thumbnail
+      ? `<img class="inline-img" src="data:image/png;base64,${result.thumbnail}" alt="גרף">`
+      : ""}`;
+  parent.appendChild(card);
+}
+
+// ══════════════════════════════════════════════
+//  FILES TAB
+// ══════════════════════════════════════════════
+async function loadFiles() {
+  const list = document.getElementById("files-list");
+  try {
+    const res   = await fetch("/api/files");
+    const files = await res.json();
+    if (!files.length) {
+      list.innerHTML = `<div class="empty-state"><div class="empty-icon">📂</div>אין קבצים עדיין.<br>בקש ממני ליצור מצגת, דוח או גרף!</div>`;
+      return;
+    }
+    list.innerHTML = "";
+    files.forEach(f => {
+      const type = f.type || "png";
+      const ext  = { pptx: "PPT", docx: "DOC", png: "PNG", xlsx: "XLS" }[type] || type.toUpperCase();
+      const card = document.createElement("div");
+      card.className = `file-card ${type}`;
+      card.innerHTML = `
+        <div class="file-header">
+          <div class="file-ext ${type}">${ext}</div>
+          <div class="file-meta">
+            <div class="file-name">${esc(f.filename)}</div>
+            <div class="file-size">${esc(f.size)} · ${esc(f.modified)}</div>
+          </div>
+          <button class="file-dl" onclick="dlFile('${esc(f.filename)}')">⬇</button>
+        </div>`;
+      list.appendChild(card);
+    });
+  } catch(e) {
+    list.innerHTML = `<div class="empty-state">שגיאה בטעינת קבצים</div>`;
+  }
+}
+
+function dlFile(filename) {
+  window.location.href = `/api/file/${encodeURIComponent(filename)}`;
+}
+
+// ══════════════════════════════════════════════
+//  MEMORY TAB
+// ══════════════════════════════════════════════
+async function loadMemory() {
+  try {
+    const res  = await fetch("/api/memory");
+    const data = await res.json();
+    const s    = data.stats || {};
+
+    document.getElementById("m-total").textContent = s.total   || 0;
+    document.getElementById("m-ok").textContent    = s.success || 0;
+    document.getElementById("m-fail").textContent  = s.failed  || 0;
+    document.getElementById("stat-total").textContent = s.total   || 0;
+    document.getElementById("stat-ok").textContent    = s.success || 0;
+
+    // sessions
+    const sessEl = document.getElementById("mem-sessions");
+    sessEl.innerHTML = `<div class="mem-section-title">פעילות אחרונה</div>`;
+    (data.recent_sessions || []).reverse().forEach(s2 => {
+      const item = document.createElement("div");
+      item.className = "mem-item";
+      item.innerHTML = `
+        <div class="mem-item-dot ${s2.status === 'success' ? 'dot-success' : 'dot-error'}"></div>
+        <div class="mem-item-text">
+          <span class="mem-item-task">${esc(s2.task?.slice(0,80) || "")}</span>
+          <span style="font-size:10px;color:var(--dim)">${esc(s2.ts || "")}</span>
+        </div>`;
+      sessEl.appendChild(item);
+    });
+    if (!(data.recent_sessions || []).length)
+      sessEl.innerHTML += `<div style="font-size:12px;color:var(--dim);padding:8px 0">אין היסטוריה עדיין</div>`;
+
+    // errors
+    const errEl = document.getElementById("mem-errors");
+    errEl.innerHTML = `<div class="mem-section-title">טעויות ולקחים</div>`;
+    (data.recent_errors || []).reverse().forEach(e => {
+      const item = document.createElement("div");
+      item.className = "mem-item";
+      item.innerHTML = `
+        <div class="mem-item-dot dot-error"></div>
+        <div class="mem-item-text">
+          <span class="mem-item-task">${esc(e.task?.slice(0,60) || "")}</span>
+          <span class="mem-item-err">${esc(e.error?.slice(0,100) || "")}</span>
+        </div>`;
+      errEl.appendChild(item);
+    });
+    if (!(data.recent_errors || []).length)
+      errEl.innerHTML += `<div style="font-size:12px;color:var(--dim);padding:8px 0">✅ אין טעויות רשומות</div>`;
+  } catch(e) { /* silent */ }
+}
+
+// ══════════════════════════════════════════════
+//  TABS
+// ══════════════════════════════════════════════
+function switchTab(name) {
+  document.querySelectorAll(".side-tab").forEach((t, i) => {
+    t.classList.toggle("active", ["files","memory"][i] === name);
+  });
+  document.querySelectorAll(".tab-content").forEach(t => t.classList.remove("active"));
+  document.getElementById(`tab-${name}`).classList.add("active");
+  if (name === "memory") loadMemory();
+  if (name === "files")  loadFiles();
+}
+
+// ══════════════════════════════════════════════
+//  UTILS
+// ══════════════════════════════════════════════
+function scrollBottom() {
+  const msgs = document.getElementById("messages");
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+function time() {
+  return new Date().toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" });
+}
+
+function esc(s) {
+  if (!s) return "";
+  return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+</script>
+</body>
+</html>

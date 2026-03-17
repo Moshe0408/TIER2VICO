@@ -4,3 +4,7 @@ mammoth
 python-docx
 PyPDF2
 pymupdf
+# MosheAI dependencies
+anthropic
+python-pptx
+matplotlib
