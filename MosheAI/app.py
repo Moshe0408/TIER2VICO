@@ -19,7 +19,31 @@ CREDENTIALS = {
     "Moshei1": "Admin2026"
 }
 
+# ── Config file for API key ──────────────
+CONFIG_FILE = Path(__file__).parent / "config.json"
+
+def load_config():
+    if CONFIG_FILE.exists():
+        try:
+            return json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    return {}
+
+def save_config(cfg: dict):
+    CONFIG_FILE.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
+
+# Load saved API key into env if not already set
+_cfg = load_config()
+if not os.environ.get("ANTHROPIC_API_KEY") and _cfg.get("api_key"):
+    os.environ["ANTHROPIC_API_KEY"] = _cfg["api_key"]
+
 agent = MosheAIAgent()
+
+
+def _reinit_agent():
+    global agent
+    agent = MosheAIAgent()
 
 
 # ── decorator הגנה ────────────────────────
@@ -102,6 +126,29 @@ def download_file(filename):
     return send_file(str(path), as_attachment=True, download_name=path.name)
 
 
+@app.route("/api/settings", methods=["GET", "POST"])
+@login_required
+def settings():
+    if request.method == "GET":
+        key = os.environ.get("ANTHROPIC_API_KEY", "")
+        masked = ("sk-ant-..." + key[-6:]) if len(key) > 10 else ""
+        return jsonify({"api_key_set": bool(key), "masked": masked})
+
+    data = request.get_json(force=True)
+    key  = (data.get("api_key") or "").strip()
+    if not key:
+        return jsonify({"error": "מפתח ריק"}), 400
+    if not key.startswith("sk-"):
+        return jsonify({"error": "מפתח לא תקין (חייב להתחיל ב-sk-)"}), 400
+
+    os.environ["ANTHROPIC_API_KEY"] = key
+    cfg = load_config()
+    cfg["api_key"] = key
+    save_config(cfg)
+    _reinit_agent()
+    return jsonify({"ok": True, "message": "✅ API Key נשמר והסוכן אותחל מחדש!"})
+
+
 @app.route("/api/file/preview/<path:filename>")
 @login_required
 def preview_file(filename):
@@ -114,16 +161,18 @@ def preview_file(filename):
 
 
 if __name__ == "__main__":
-    print("\n" + "═" * 50)
-    print("  🤖  MosheAI  -  מוכן לעבודה!")
-    print("═" * 50)
+    import sys
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    print("\n" + "=" * 50)
+    print("  MosheAI  -  Ready!")
+    print("=" * 50)
     if not os.environ.get("ANTHROPIC_API_KEY"):
-        print("  ⚠️  ANTHROPIC_API_KEY לא מוגדר!")
-        print("     הגדר: set ANTHROPIC_API_KEY=sk-ant-...")
+        print("  WARNING: ANTHROPIC_API_KEY not set!")
+        print("     set ANTHROPIC_API_KEY=sk-ant-...")
     else:
-        print("  ✅  API Key מוגדר")
-    print(f"  📁  פלטים: {OUTPUT_DIR}")
-    print("  🌐  פתח: http://localhost:5000")
-    print("  🔐  משתמש: Moshei1 | סיסמה: Admin2026")
-    print("═" * 50 + "\n")
+        print("  API Key: OK")
+    print(f"  Outputs: {OUTPUT_DIR}")
+    print("  URL: http://localhost:5000")
+    print("  User: Moshei1 | Pass: Admin2026")
+    print("=" * 50 + "\n")
     app.run(host="0.0.0.0", port=5000, debug=False, threaded=True)
