@@ -10,6 +10,13 @@ import pandas as pd
 import pytz
 import json
 import pyperclip
+import glob as glob_module
+import subprocess
+import tempfile
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+import matplotlib.gridspec as gridspec
 
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
@@ -68,8 +75,15 @@ LOG_FILE = os.path.join(LOG_DIR, "tier2_monitor.log")
 TOKEN_CACHE_FILE = os.path.join(LOG_DIR, "glassix_token_cache.json")
 TOKEN_EXPIRY_SECONDS = 3600  # 1 שעה
 
+TIER2_DATA_DIR   = r"C:\Users\Moshei1\OneDrive - Verifone\Desktop\TIP\STFPNOW\בדיקות\TIER2"
+DIGITAL_DATA_DIR = r"C:\Users\Moshei1\OneDrive - Verifone\Desktop\TIP\STFPNOW\בדיקות\Digital"
+STFP_DATA_DIR    = r"C:\Users\Moshei1\OneDrive - Verifone\Desktop\TIP\STFPNOW\בדיקות\STFP"
+
 # משתנה גלובלי שישמור תמיד את הטוקן האחרון
 global_token = None
+
+USER_SESSIONS = {}  # {group_name: {"state": str, "stfp_scripts": list}}
+# states: "idle" | "main_menu" | "tier2" | "digital" | "stfp"
 
 
 # ---------- LOGGING ----------
@@ -589,39 +603,33 @@ def clean_text_for_comparison(text):
 
 
 def listen_for_commands(driver, group_name, token):
-    """מאזין להודעות בקבוצה - מניעת כפילויות וזיהוי מדויק"""
+    """מאזין לכל הודעה נכנסת בקבוצה ומעביר לבוט האינטראקטיבי"""
     global LAST_PROCESSED_IDS
     try:
-        # 1. וודא שאנחנו בצ'אט הנכון (קבוצת הבוט החדשה)
+        # 1. וודא שאנחנו בצ'אט הנכון
         try:
-            # חיפוש חכם בכותרת
             header = driver.find_element(By.XPATH, '//*[@id="main"]//header')
             if group_name not in header.text:
                 log(f"🔄 עובר לצ'אט של הבוט: {group_name}")
-                group_xpath = f'//span[@title="{group_name}"]'
-                driver.find_element(By.XPATH, group_xpath).click()
-                time.sleep(1)
+                driver.find_element(By.XPATH, f'//span[@title="{group_name}"]').click()
+                time.sleep(2)
         except Exception:
-            # אם לא גלוי או לא נמצא, ננסה לחפש ברשימת הצ'אטים
             try:
-                group_xpath = f'//span[@title="{group_name}"]'
-                el = driver.find_element(By.XPATH, group_xpath)
-                el.click()
-                time.sleep(1)
+                driver.find_element(By.XPATH, f'//span[@title="{group_name}"]').click()
+                time.sleep(2)
             except Exception:
                 pass
 
-        # 2. חיפוש הודעות חדשות (ID לכל קבוצה בנפרד)
+        # 2. שליפת הודעות לפי data-id
         last_id = LAST_PROCESSED_IDS.get(group_name)
-
-        msg_xpath = '//div[@role="row"] | //div[contains(@class, "message-in")] | //div[contains(@class, "message-out")]'
-        messages = driver.find_elements(By.XPATH, msg_xpath)
+        messages = driver.find_elements(By.XPATH, '//div[@data-id]')
 
         if not messages:
+            log(f"[DEBUG] {group_name}: לא נמצאו הודעות (div[@data-id])")
             return
 
-        latest_el = messages[-1]
-        latest_id = latest_el.get_attribute("data-id") or str(hash(latest_el.text))
+        latest_id = messages[-1].get_attribute("data-id")
+        log(f"[DEBUG] {group_name}: {len(messages)} הודעות, latest={latest_id}, last={last_id}")
 
         if last_id is None:
             LAST_PROCESSED_IDS[group_name] = latest_id
@@ -630,70 +638,34 @@ def listen_for_commands(driver, group_name, token):
         if latest_id == last_id:
             return
 
-        # 3. סריקת הודעות חדשות
+        # 3. סריקת הודעות חדשות — כל הודעה נכנסת (false_) מועברת ל-handle_message
         new_commands = []
-        # בודקים רק נתח קטן אחרון
-        for msg_el in reversed(messages[-8:]):
-            m_id = msg_el.get_attribute("data-id") or str(hash(msg_el.text))
+
+        for msg_el in reversed(messages[-10:]):
+            m_id = msg_el.get_attribute("data-id") or ""
             if m_id == last_id:
                 break
-
-            cls = msg_el.get_attribute("class") or ""
-            if "message-in" in cls:
-                raw_text = msg_el.text.strip()
-                if not raw_text:
-                    continue
-
-                lines = [line.strip() for line in raw_text.split("\n")]
-                commands_list = ["עזרה", "help", "סטטוס", "status", "סלא", "sla", "יומי", "daily", "בדיקה", "test"]
-
-                for line in lines:
-                    clean_line = clean_text_for_comparison(line)
-                    # תומך בפקודות (! כבר הוסר על ידי clean_text_for_comparison)
-                    is_cmd = any(clean_line == c for c in commands_list)
-                    if is_cmd or line.startswith("!"):
-                        log(f"🎯 פקודה ב-{group_name}: '{clean_line}'")
-                        new_commands.append(line)
-                        break
+            if not m_id.startswith("false_"):
+                continue
+            raw_text = msg_el.text.strip()
+            if not raw_text:
+                continue
+            first_line = raw_text.split("\n")[0].strip()
+            if first_line:
+                log(f"📩 הודעה נכנסת ב-{group_name}: '{first_line}'")
+                new_commands.append(first_line)
+                break  # מעבד רק את ההודעה האחרונה
 
         # מעדכנים את הסימניה
         LAST_PROCESSED_IDS[group_name] = latest_id
 
         # ביצוע
         for cmd in reversed(new_commands):
-            handle_command(driver, cmd, token, group_name)
+            handle_message(driver, cmd, token, group_name)
 
     except Exception as e:
         if "stale element" not in str(e).lower():
             log(f"⚠️ שגיאה במאזין: {str(e)}")
-
-
-def handle_command(driver, text, token, group_name):
-    """מפענח ומבצע פקודות - תגובה תמיד לאותה קבוצה ממנה הגיעה הפקודה"""
-    clean_full = clean_text_for_comparison(text)
-    if not clean_full:
-        return
-
-    clean_cmd = clean_full.split()[0]
-    log(f"⚙️ מעבד פקודה '{clean_cmd}' עבור קבוצת '{group_name}'")
-
-    response = None
-    if clean_cmd in ["עזרה", "help"]:
-        response = "🤖 *Tier 2 Bot - Commands:*\n\n▫️ *status* - Open/Snoozed report\n▫️ *sla* - Immediate SLA check\n▫️ *daily* - Daily closures summary\n▫️ *test* - Test connection"
-    elif clean_cmd in ["סטטוס", "status"]:
-        send_hourly_report(token, group_name, driver=driver)
-        return
-    elif clean_cmd in ["סלא", "sla"]:
-        check_sla_and_alert(token, group_name, driver=driver)
-        return
-    elif clean_cmd in ["יומי", "daily"]:
-        send_current_daily_summary(token, group_name, driver=driver)
-        return
-    elif clean_cmd in ["בדיקה", "test"]:
-        response = "👋 Bot is online and listening!"
-
-    if response:
-        send_whatsapp_message_direct(driver, group_name, response)
 
 
 def send_whatsapp_message_direct(driver, group_name, message):
@@ -831,6 +803,325 @@ def send_with_retries(group_name, message, driver=None):
             return True
         time.sleep(delay)
     return False
+
+
+# ---------- AI AGENT HELPERS ----------
+
+def get_latest_file(directory, pattern):
+    """מחזיר את הקובץ החדש ביותר שמתאים לתבנית, או None אם לא נמצא"""
+    try:
+        matches = glob_module.glob(os.path.join(directory, pattern))
+        if not matches:
+            return None
+        return max(matches, key=os.path.getmtime)
+    except Exception:
+        log_exc("get_latest_file")
+        return None
+
+
+def xlsx_to_image(xlsx_path, title=""):
+    """ממיר קובץ XLSX לתמונה PNG, מחזיר נתיב לקובץ זמני או None"""
+    try:
+        df = pd.read_excel(xlsx_path)
+        if df.empty:
+            return None
+        fig, ax = plt.subplots(figsize=(14, max(4, len(df) * 0.4 + 1.5)))
+        ax.axis('off')
+        col_labels = list(df.columns)
+        row_labels = list(range(1, len(df) + 1))
+        table = ax.table(
+            cellText=df.fillna("").astype(str).values,
+            colLabels=col_labels,
+            loc='center',
+            cellLoc='center'
+        )
+        table.auto_set_font_size(False)
+        table.set_fontsize(8)
+        table.scale(1, 1.4)
+        # Header row background
+        for col_idx in range(len(col_labels)):
+            cell = table[0, col_idx]
+            cell.set_facecolor('#2196F3')
+            cell.set_text_props(color='white')
+        # Alternating row colors
+        for row_idx in range(1, len(df) + 1):
+            bg = '#f5f5f5' if row_idx % 2 == 1 else 'white'
+            for col_idx in range(len(col_labels)):
+                table[row_idx, col_idx].set_facecolor(bg)
+        ax.set_title(title or os.path.basename(xlsx_path), fontsize=11, pad=10)
+        out_path = tempfile.mktemp(suffix='.png')
+        plt.savefig(out_path, bbox_inches='tight', dpi=150)
+        plt.close(fig)
+        return out_path
+    except Exception:
+        log_exc("xlsx_to_image")
+        return None
+
+
+def send_image_via_whatsapp(driver, group_name, image_path, caption=""):
+    """שולח תמונה לקבוצה ב-WhatsApp Web דרך file input"""
+    try:
+        wait = WebDriverWait(driver, 15)
+
+        # וודא שהקבוצה הנכונה פתוחה
+        is_open = False
+        try:
+            header = driver.find_element(By.XPATH, '//*[@id="main"]//header')
+            if group_name in header.text:
+                is_open = True
+        except Exception:
+            pass
+
+        if not is_open:
+            log(f"🔍 send_image: מחפש קבוצה '{group_name}'...")
+            group_xpath = f'//span[@title="{group_name}"]'
+            try:
+                side_pane = driver.find_element(By.ID, "pane-side")
+                driver.execute_script("arguments[0].scrollTop = 0;", side_pane)
+                group_el = wait.until(EC.element_to_be_clickable((By.XPATH, group_xpath)))
+                group_el.click()
+            except Exception:
+                search_xpaths = [
+                    '//div[@role="textbox" and @data-tab="3"]',
+                    '//div[@contenteditable="true"][@data-tab="3"]',
+                ]
+                search_box = None
+                for sx in search_xpaths:
+                    try:
+                        search_box = driver.find_element(By.XPATH, sx)
+                        break
+                    except Exception:
+                        continue
+                if not search_box:
+                    raise Exception("לא הצלחתי לאתר את תיבת החיפוש")
+                search_box.click()
+                search_box.send_keys(group_name)
+                time.sleep(2)
+                group_el = wait.until(EC.element_to_be_clickable((By.XPATH, group_xpath)))
+                group_el.click()
+            time.sleep(1)
+
+        # מציאת file input להעלאת קובץ
+        file_input = driver.find_element(
+            By.XPATH,
+            '//input[@accept="image/*,video/mp4,video/3gpp,video/quicktime"]'
+        )
+        driver.execute_script(
+            "arguments[0].style.display='block'; arguments[0].style.visibility='visible';",
+            file_input
+        )
+        file_input.send_keys(os.path.abspath(image_path))
+        time.sleep(2)  # המתנה לטעינת תצוגה מקדימה
+
+        if caption:
+            try:
+                caption_input = driver.find_element(
+                    By.XPATH, '//div[@contenteditable="true"][@data-tab="10"]'
+                )
+                pyperclip.copy(caption)
+                caption_input.click()
+                caption_input.send_keys(Keys.CONTROL, "v")
+            except Exception:
+                log("⚠️ לא הצלחתי להוסיף כיתוב לתמונה")
+
+        # שליחה
+        driver.find_element(By.XPATH, '//span[@data-icon="send"]').click()
+        time.sleep(1)
+        log(f"✅ תמונה נשלחה ל-{group_name}")
+        return True
+    except Exception as e:
+        log(f"❌ שגיאה בשליחת תמונה: {str(e)}")
+        return False
+
+
+def send_main_menu(driver, group_name):
+    """שולח תפריט ראשי ומאפס סשן"""
+    msg = (
+        "🤖 *Tier 2 AI Bot — בחר אפשרות:*\n"
+        "════════════════════\n"
+        "1️⃣  *Tier 2*   — דוחות שיחות וכרטיסים\n"
+        "2️⃣  *Digital* — דוחות דיגיטל\n"
+        "3️⃣  *STFP*     — הפעלת סקריפטים\n"
+        "════════════════════\n"
+        "_השב במספר או בשם_"
+    )
+    send_with_retries(group_name, msg, driver=driver)
+    USER_SESSIONS[group_name] = {"state": "main_menu", "stfp_scripts": []}
+
+
+def send_tier2_menu(driver, group_name):
+    """שולח תפריט Tier 2"""
+    msg = (
+        "📊 *Tier 2 — בחר דוח:*\n"
+        "════════════════════\n"
+        "1️⃣  דוח יומי אחרון\n"
+        "2️⃣  דוח חודשי אחרון\n"
+        "3️⃣  מצב נוכחי (SLA + פתוחות)\n"
+        "0️⃣  חזרה לתפריט ראשי"
+    )
+    send_with_retries(group_name, msg, driver=driver)
+    USER_SESSIONS[group_name]["state"] = "tier2"
+
+
+def send_digital_menu(driver, group_name):
+    """שולח תפריט Digital"""
+    msg = (
+        "📱 *Digital — בחר דוח:*\n"
+        "════════════════════\n"
+        "1️⃣  דוח יומי אחרון\n"
+        "2️⃣  דוח חודשי אחרון\n"
+        "3️⃣  דוח השוואה אחרון\n"
+        "0️⃣  חזרה לתפריט ראשי"
+    )
+    send_with_retries(group_name, msg, driver=driver)
+    USER_SESSIONS[group_name]["state"] = "digital"
+
+
+def send_stfp_menu(driver, group_name):
+    """שולח תפריט STFP עם רשימת סקריפטים"""
+    try:
+        scripts = sorted([
+            f for f in os.listdir(STFP_DATA_DIR)
+            if f.lower().endswith('.py')
+        ])
+    except Exception:
+        scripts = []
+    USER_SESSIONS[group_name]["stfp_scripts"] = scripts
+    lines = [
+        "⚙️ *STFP — בחר סקריפט להפעלה:*",
+        "════════════════════"
+    ]
+    for i, s in enumerate(scripts, start=1):
+        lines.append(f"{i}️⃣  {s}" if i <= 9 else f"{i}.  {s}")
+    lines.append("0️⃣  חזרה לתפריט ראשי")
+    send_with_retries(group_name, "\n".join(lines), driver=driver)
+    USER_SESSIONS[group_name]["state"] = "stfp"
+
+
+def handle_message(driver, text, token, group_name):
+    """מנוע מצבים — מטפל בכל הודעה נכנסת"""
+    global USER_SESSIONS
+    session = USER_SESSIONS.get(group_name, {"state": "idle", "stfp_scripts": []})
+    state = session.get("state", "idle")
+    clean = clean_text_for_comparison(text).strip()
+
+    # "0" או "חזרה" תמיד חוזרים לתפריט ראשי
+    if clean in ["0", "חזרה", "back", "menu", "תפריט"]:
+        send_main_menu(driver, group_name)
+        return
+
+    if state in ("idle", "main_menu"):
+        if clean in ["1", "tier 2", "tier2"]:
+            send_tier2_menu(driver, group_name)
+        elif clean in ["2", "digital"]:
+            send_digital_menu(driver, group_name)
+        elif clean in ["3", "stfp"]:
+            send_stfp_menu(driver, group_name)
+        else:
+            send_main_menu(driver, group_name)
+
+    elif state == "tier2":
+        if clean == "1":
+            f = get_latest_file(TIER2_DATA_DIR, "Tickets_דוח_יומי_*.xlsx")
+            if f:
+                img = xlsx_to_image(f, "📊 דוח יומי — Tier 2")
+                if img:
+                    send_image_via_whatsapp(driver, group_name, img)
+                    try:
+                        os.remove(img)
+                    except Exception:
+                        pass
+                else:
+                    send_with_retries(group_name, "❌ שגיאה ביצירת התמונה", driver=driver)
+            else:
+                send_with_retries(group_name, "❌ לא נמצא קובץ דוח יומי ב-TIER2", driver=driver)
+        elif clean == "2":
+            f = get_latest_file(TIER2_DATA_DIR, "Tickets_דוח_חודשי_*.xlsx")
+            if f:
+                img = xlsx_to_image(f, "📊 דוח חודשי — Tier 2")
+                if img:
+                    send_image_via_whatsapp(driver, group_name, img)
+                    try:
+                        os.remove(img)
+                    except Exception:
+                        pass
+                else:
+                    send_with_retries(group_name, "❌ שגיאה ביצירת התמונה", driver=driver)
+            else:
+                send_with_retries(group_name, "❌ לא נמצא קובץ דוח חודשי ב-TIER2", driver=driver)
+        elif clean == "3":
+            send_hourly_report(token, group_name, driver=driver)
+        else:
+            send_tier2_menu(driver, group_name)
+
+    elif state == "digital":
+        if clean == "1":
+            f = get_latest_file(DIGITAL_DATA_DIR, "Tickets_דוח_יומי_*.xlsx")
+            if not f:
+                f = get_latest_file(DIGITAL_DATA_DIR, "WhatsApp_דוח_יומי_*.xlsx")
+            if f:
+                img = xlsx_to_image(f, "📱 דוח יומי — Digital")
+                if img:
+                    send_image_via_whatsapp(driver, group_name, img)
+                    try:
+                        os.remove(img)
+                    except Exception:
+                        pass
+                else:
+                    send_with_retries(group_name, "❌ שגיאה ביצירת התמונה", driver=driver)
+            else:
+                send_with_retries(group_name, "❌ לא נמצא קובץ דוח יומי ב-Digital", driver=driver)
+        elif clean == "2":
+            f = get_latest_file(DIGITAL_DATA_DIR, "Tickets_דוח_חודשי_*.xlsx")
+            if not f:
+                f = get_latest_file(DIGITAL_DATA_DIR, "WhatsApp_דוח_חודשי_*.xlsx")
+            if f:
+                img = xlsx_to_image(f, "📱 דוח חודשי — Digital")
+                if img:
+                    send_image_via_whatsapp(driver, group_name, img)
+                    try:
+                        os.remove(img)
+                    except Exception:
+                        pass
+                else:
+                    send_with_retries(group_name, "❌ שגיאה ביצירת התמונה", driver=driver)
+            else:
+                send_with_retries(group_name, "❌ לא נמצא קובץ דוח חודשי ב-Digital", driver=driver)
+        elif clean == "3":
+            f = get_latest_file(DIGITAL_DATA_DIR, "*השוואה*.xlsx")
+            if f:
+                img = xlsx_to_image(f, "📱 דוח השוואה — Digital")
+                if img:
+                    send_image_via_whatsapp(driver, group_name, img)
+                    try:
+                        os.remove(img)
+                    except Exception:
+                        pass
+                else:
+                    send_with_retries(group_name, "❌ שגיאה ביצירת התמונה", driver=driver)
+            else:
+                send_with_retries(group_name, "❌ לא נמצא קובץ דוח השוואה ב-Digital", driver=driver)
+        else:
+            send_digital_menu(driver, group_name)
+
+    elif state == "stfp":
+        scripts = session.get("stfp_scripts", [])
+        try:
+            idx = int(clean) - 1
+            if 0 <= idx < len(scripts):
+                script_name = scripts[idx]
+                script_path = os.path.join(STFP_DATA_DIR, script_name)
+                log(f"⚙️ מפעיל סקריפט: {script_name}")
+                subprocess.Popen(
+                    ["python", script_path],
+                    creationflags=subprocess.CREATE_NEW_CONSOLE if sys.platform == "win32" else 0
+                )
+                send_with_retries(group_name, f"✅ הסקריפט *{script_name}* הופעל בהצלחה!", driver=driver)
+                USER_SESSIONS[group_name]["state"] = "idle"
+            else:
+                send_stfp_menu(driver, group_name)
+        except (ValueError, IndexError):
+            send_stfp_menu(driver, group_name)
 
 
 # ---------- UPDATED SLA & REPORTS ----------
