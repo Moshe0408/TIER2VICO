@@ -23,6 +23,7 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
@@ -647,14 +648,42 @@ def listen_for_commands(driver, group_name, token):
                 break
             if not m_id.startswith("false_"):
                 continue
-            raw_text = msg_el.text.strip()
-            if not raw_text:
+
+            # שליפת טקסט ההודעה בלבד (ללא שם שולח / timestamp)
+            msg_text = ""
+            try:
+                # ניסיון ראשון: span עם copyable-text (הטקסט האמיתי)
+                span = msg_el.find_element(By.XPATH, './/span[contains(@class,"copyable-text")]')
+                msg_text = span.text.strip()
+            except Exception:
+                pass
+
+            if not msg_text:
+                try:
+                    # ניסיון שני: div[class*="selectable-text"]
+                    span = msg_el.find_element(By.XPATH, './/div[contains(@class,"selectable-text")]//span')
+                    msg_text = span.text.strip()
+                except Exception:
+                    pass
+
+            if not msg_text:
+                # fallback: טקסט גולמי — מדלגים על שורה ראשונה (שם שולח בקבוצה)
+                raw_text = msg_el.text.strip()
+                lines = [l.strip() for l in raw_text.split("\n") if l.strip()]
+                # בקבוצה: שורה 0 = שם שולח, שורה אחרונה = שעה — לוקחים את השורה האמצעית
+                if len(lines) >= 3:
+                    msg_text = lines[1]
+                elif len(lines) == 2:
+                    msg_text = lines[0]
+                elif len(lines) == 1:
+                    msg_text = lines[0]
+
+            if not msg_text:
                 continue
-            first_line = raw_text.split("\n")[0].strip()
-            if first_line:
-                log(f"📩 הודעה נכנסת ב-{group_name}: '{first_line}'")
-                new_commands.append(first_line)
-                break  # מעבד רק את ההודעה האחרונה
+
+            log(f"📩 הודעה נכנסת ב-{group_name}: '{msg_text}'")
+            new_commands.append(msg_text)
+            break  # מעבד רק את ההודעה האחרונה
 
         # מעדכנים את הסימניה
         LAST_PROCESSED_IDS[group_name] = latest_id
@@ -678,7 +707,7 @@ def send_whatsapp_message_direct(driver, group_name, message):
             search_box = driver.find_element(By.XPATH, '//div[@role="textbox" and @data-tab="3"] | //div[@contenteditable="true"][@data-tab="3"]')
             if search_box.text:
                 search_box.click()
-                search_box.send_keys(Keys.CONTROL, "a")
+                ActionChains(driver).key_down(Keys.CONTROL).send_keys("a").key_up(Keys.CONTROL).perform()
                 search_box.send_keys(Keys.BACKSPACE)
         except Exception:
             pass
@@ -723,7 +752,7 @@ def send_whatsapp_message_direct(driver, group_name, message):
                 driver.execute_script("arguments[0].click();", search_box)
                 time.sleep(0.3)
                 pyperclip.copy(group_name)
-                search_box.send_keys(Keys.CONTROL, "v")
+                ActionChains(driver).key_down(Keys.CONTROL).send_keys("v").key_up(Keys.CONTROL).perform()
                 time.sleep(2)
 
                 group_el = wait.until(EC.element_to_be_clickable((By.XPATH, group_xpath)))
@@ -750,11 +779,19 @@ def send_whatsapp_message_direct(driver, group_name, message):
         if not input_box:
             raise Exception("לא נמצאה תיבת הקלדה (Input Box)")
 
-        pyperclip.copy(message)
+        # ריקון קופסה לפני הדבקה
         input_box.click()
-        time.sleep(0.3)
-        input_box.send_keys(Keys.CONTROL, "v")
-        time.sleep(0.5)
+        time.sleep(0.2)
+        ActionChains(driver).key_down(Keys.CONTROL).send_keys("a").key_up(Keys.CONTROL).perform()
+        time.sleep(0.1)
+        input_box.send_keys(Keys.BACKSPACE)
+        time.sleep(0.1)
+
+        # הדבקה ושליחה
+        pyperclip.copy(message)
+        time.sleep(0.2)
+        ActionChains(driver).key_down(Keys.CONTROL).send_keys("v").key_up(Keys.CONTROL).perform()
+        time.sleep(0.8)
         input_box.send_keys(Keys.ENTER)
         log("✅ הודעה נשלחה בהצלחה.")
         return True
@@ -777,8 +814,10 @@ def send_whatsapp_group_instant(group_id_or_name, message):
         wait.until(EC.presence_of_element_located((By.XPATH, f'//span[@title="{group_id_or_name}"]'))).click()
         input_box = wait.until(EC.presence_of_element_located((By.XPATH, '//div[@contenteditable="true"][@data-tab="10"]')))
         pyperclip.copy(message)
-        input_box.send_keys(Keys.CONTROL, "v")
-        time.sleep(0.5)
+        input_box.click()
+        time.sleep(0.2)
+        ActionChains(driver).key_down(Keys.CONTROL).send_keys("v").key_up(Keys.CONTROL).perform()
+        time.sleep(0.8)
         input_box.send_keys(Keys.ENTER)
         time.sleep(1)
         driver.quit()
@@ -918,7 +957,8 @@ def send_image_via_whatsapp(driver, group_name, image_path, caption=""):
                 )
                 pyperclip.copy(caption)
                 caption_input.click()
-                caption_input.send_keys(Keys.CONTROL, "v")
+                time.sleep(0.2)
+                ActionChains(driver).key_down(Keys.CONTROL).send_keys("v").key_up(Keys.CONTROL).perform()
             except Exception:
                 log("⚠️ לא הצלחתי להוסיף כיתוב לתמונה")
 
@@ -949,6 +989,7 @@ def send_main_menu(driver, group_name):
 
 def send_tier2_menu(driver, group_name):
     """שולח תפריט Tier 2"""
+    USER_SESSIONS.setdefault(group_name, {"state": "idle", "stfp_scripts": []})
     msg = (
         "📊 *Tier 2 — בחר דוח:*\n"
         "════════════════════\n"
@@ -963,6 +1004,7 @@ def send_tier2_menu(driver, group_name):
 
 def send_digital_menu(driver, group_name):
     """שולח תפריט Digital"""
+    USER_SESSIONS.setdefault(group_name, {"state": "idle", "stfp_scripts": []})
     msg = (
         "📱 *Digital — בחר דוח:*\n"
         "════════════════════\n"
@@ -977,6 +1019,7 @@ def send_digital_menu(driver, group_name):
 
 def send_stfp_menu(driver, group_name):
     """שולח תפריט STFP עם רשימת סקריפטים"""
+    USER_SESSIONS.setdefault(group_name, {"state": "idle", "stfp_scripts": []})
     try:
         scripts = sorted([
             f for f in os.listdir(STFP_DATA_DIR)
