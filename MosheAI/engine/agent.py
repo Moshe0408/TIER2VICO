@@ -1,12 +1,13 @@
-"""ליבת הסוכן MosheAI - מתחבר ל-Claude API ומייצר תוצאות"""
+"""ליבת הסוכן MosheAI - מתחבר ל-Groq API ומייצר תוצאות"""
 
 import json
-import anthropic
+import os
+from groq import Groq
 
 from . import memory as mem_module
-from .tools import TOOLS_SCHEMA, run_tool
+from .tools import TOOLS_SCHEMA_GROQ, run_tool
 
-MODEL = "claude-opus-4-6"
+MODEL = "llama-3.3-70b-versatile"
 
 SYSTEM = """אתה MosheAI - עוזר AI מקצועי חכם שעובד בעברית.
 
@@ -28,103 +29,130 @@ SYSTEM = """אתה MosheAI - עוזר AI מקצועי חכם שעובד בעבר
 class MosheAIAgent:
     def __init__(self):
         self.memory = mem_module.load()
-        self.client = anthropic.Anthropic()
+        api_key = os.environ.get("GROQ_API_KEY", "")
+        self.client = Groq(api_key=api_key) if api_key else None
 
     def stream_response(self, user_message: str):
         """
         Generator — מניב dict-ים בפורמט SSE:
-          {"type": "thinking",  "content": "..."}
           {"type": "text",      "content": "..."}
           {"type": "tool_start","tool": "...", "label": "..."}
           {"type": "tool_done", "tool": "...", "result": {...}}
           {"type": "done",      "outputs": [...]}
           {"type": "error",     "content": "..."}
         """
-        messages    = [{"role": "user", "content": user_message}]
+        if not self.client:
+            yield {"type": "error", "content": "❌ GROQ_API_KEY לא מוגדר. עבור להגדרות והגדר את ה-API Key."}
+            return
+
         all_outputs = []
-        system      = SYSTEM
+        system = SYSTEM
 
         lessons = mem_module.get_lessons(self.memory)
         if lessons:
             system += f"\n\n{lessons}"
 
+        full_messages = [
+            {"role": "system", "content": system},
+            {"role": "user",   "content": user_message}
+        ]
+
         try:
             while True:
-                with self.client.messages.stream(
+                stream = self.client.chat.completions.create(
                     model=MODEL,
+                    messages=full_messages,
+                    tools=TOOLS_SCHEMA_GROQ,
+                    tool_choice="auto",
+                    stream=True,
                     max_tokens=8192,
-                    thinking={"type": "adaptive"},
-                    system=system,
-                    tools=TOOLS_SCHEMA,
-                    messages=messages
-                ) as stream:
+                )
 
-                    in_thinking = False
-                    thinking_buf = ""
+                current_text   = ""
+                tool_calls_acc = {}   # index -> {id, name, arguments}
 
-                    for event in stream:
-                        if event.type == "content_block_start":
-                            if event.content_block.type == "thinking":
-                                in_thinking = True
-                                thinking_buf = ""
-                            elif event.content_block.type == "text":
-                                in_thinking = False
-                                if thinking_buf:
-                                    yield {"type": "thinking_done", "summary": thinking_buf[:200]}
-                                    thinking_buf = ""
+                for chunk in stream:
+                    choice = chunk.choices[0]
+                    delta  = choice.delta
 
-                        elif event.type == "content_block_delta":
-                            if event.delta.type == "thinking_delta":
-                                thinking_buf += event.delta.thinking
-                                yield {"type": "thinking", "content": event.delta.thinking}
-                            elif event.delta.type == "text_delta":
-                                yield {"type": "text", "content": event.delta.text}
+                    if delta.content:
+                        current_text += delta.content
+                        yield {"type": "text", "content": delta.content}
 
-                    response = stream.get_final_message()
+                    if delta.tool_calls:
+                        for tc in delta.tool_calls:
+                            idx = tc.index
+                            if idx not in tool_calls_acc:
+                                tool_calls_acc[idx] = {
+                                    "id":        tc.id or f"call_{idx}",
+                                    "name":      "",
+                                    "arguments": ""
+                                }
+                            if tc.function.name:
+                                tool_calls_acc[idx]["name"] = tc.function.name
+                            if tc.function.arguments:
+                                tool_calls_acc[idx]["arguments"] += tc.function.arguments
 
-                # כלים?
-                tool_uses = [b for b in response.content if b.type == "tool_use"]
-                if not tool_uses:
+                # אין כלים → סיימנו
+                if not tool_calls_acc:
                     break
 
-                messages.append({"role": "assistant", "content": response.content})
+                # בניית הודעת assistant עם tool_calls
+                assistant_tool_calls = [
+                    {
+                        "id":   tool_calls_acc[i]["id"],
+                        "type": "function",
+                        "function": {
+                            "name":      tool_calls_acc[i]["name"],
+                            "arguments": tool_calls_acc[i]["arguments"]
+                        }
+                    }
+                    for i in sorted(tool_calls_acc)
+                ]
 
-                tool_results = []
-                for tu in tool_uses:
-                    label = _tool_label(tu.name)
-                    yield {"type": "tool_start", "tool": tu.name, "label": label}
+                full_messages.append({
+                    "role":       "assistant",
+                    "content":    current_text or None,
+                    "tool_calls": assistant_tool_calls
+                })
 
-                    result = run_tool(tu.name, tu.input, self.memory)
+                # הרצת כלים
+                for tc in assistant_tool_calls:
+                    name = tc["function"]["name"]
+                    try:
+                        args = json.loads(tc["function"]["arguments"])
+                    except Exception:
+                        args = {}
+
+                    yield {"type": "tool_start", "tool": name, "label": _tool_label(name)}
+
+                    result = run_tool(name, args, self.memory)
 
                     if result.get("path"):
                         all_outputs.append(result["path"])
 
-                    yield {"type": "tool_done", "tool": tu.name, "result": result}
+                    yield {"type": "tool_done", "tool": name, "result": result}
 
-                    tool_results.append({
-                        "type": "tool_result",
-                        "tool_use_id": tu.id,
-                        "content": json.dumps(result, ensure_ascii=False)
+                    full_messages.append({
+                        "role":         "tool",
+                        "tool_call_id": tc["id"],
+                        "content":      json.dumps(result, ensure_ascii=False)
                     })
-
-                messages.append({"role": "user", "content": tool_results})
 
             mem_module.record_success(self.memory, user_message, all_outputs)
             yield {"type": "done", "outputs": all_outputs}
 
-        except anthropic.AuthenticationError:
-            err = "❌ API Key שגוי או חסר. הגדר את ANTHROPIC_API_KEY."
-            mem_module.record_error(self.memory, user_message, err)
-            yield {"type": "error", "content": err}
         except Exception as e:
             err = str(e)
+            if any(k in err.lower() for k in ("auth", "api key", "invalid_api_key", "401")):
+                err = "❌ API Key שגוי. עבור להגדרות ועדכן את מפתח Groq."
             mem_module.record_error(self.memory, user_message, err)
             yield {"type": "error", "content": f"שגיאה: {err}"}
 
     def get_memory_summary(self) -> dict:
         m = mem_module.load()
         return {
-            "stats": m["stats"],
+            "stats":           m["stats"],
             "recent_sessions": m["sessions"][-8:],
             "recent_errors":   m["errors"][-5:]
         }

@@ -13,6 +13,7 @@ from engine.tools import list_outputs, OUTPUT_DIR
 app = Flask(__name__)
 app.secret_key = "mosheai-secret-2026-xk9"
 app.config["JSON_AS_ASCII"] = False
+app.config["TEMPLATES_AUTO_RELOAD"] = True
 
 # ── אישורים ──────────────────────────────
 CREDENTIALS = {
@@ -35,8 +36,8 @@ def save_config(cfg: dict):
 
 # Load saved API key into env if not already set
 _cfg = load_config()
-if not os.environ.get("ANTHROPIC_API_KEY") and _cfg.get("api_key"):
-    os.environ["ANTHROPIC_API_KEY"] = _cfg["api_key"]
+if not os.environ.get("GROQ_API_KEY") and _cfg.get("api_key"):
+    os.environ["GROQ_API_KEY"] = _cfg["api_key"]
 
 agent = MosheAIAgent()
 
@@ -80,7 +81,7 @@ def logout():
 @app.route("/")
 @login_required
 def index():
-    api_key_set = bool(os.environ.get("ANTHROPIC_API_KEY"))
+    api_key_set = bool(os.environ.get("GROQ_API_KEY"))
     username    = session.get("username", "")
     return render_template("index.html", api_key_set=api_key_set, username=username)
 
@@ -130,23 +131,23 @@ def download_file(filename):
 @login_required
 def settings():
     if request.method == "GET":
-        key = os.environ.get("ANTHROPIC_API_KEY", "")
-        masked = ("sk-ant-..." + key[-6:]) if len(key) > 10 else ""
-        return jsonify({"api_key_set": bool(key), "masked": masked})
+        key = os.environ.get("GROQ_API_KEY", "")
+        masked = ("gsk_..." + key[-6:]) if len(key) > 10 else ""
+        return jsonify({"api_key_set": bool(key), "masked": masked, "provider": "Groq"})
 
     data = request.get_json(force=True)
     key  = (data.get("api_key") or "").strip()
     if not key:
         return jsonify({"error": "מפתח ריק"}), 400
-    if not key.startswith("sk-"):
-        return jsonify({"error": "מפתח לא תקין (חייב להתחיל ב-sk-)"}), 400
+    if not key.startswith("gsk_"):
+        return jsonify({"error": "מפתח Groq לא תקין (חייב להתחיל ב-gsk_)"}), 400
 
-    os.environ["ANTHROPIC_API_KEY"] = key
+    os.environ["GROQ_API_KEY"] = key
     cfg = load_config()
     cfg["api_key"] = key
     save_config(cfg)
     _reinit_agent()
-    return jsonify({"ok": True, "message": "✅ API Key נשמר והסוכן אותחל מחדש!"})
+    return jsonify({"ok": True, "message": "✅ Groq API Key נשמר והסוכן אותחל מחדש!"})
 
 
 @app.route("/api/file/preview/<path:filename>")
@@ -166,11 +167,11 @@ if __name__ == "__main__":
     print("\n" + "=" * 50)
     print("  MosheAI  -  Ready!")
     print("=" * 50)
-    if not os.environ.get("ANTHROPIC_API_KEY"):
-        print("  WARNING: ANTHROPIC_API_KEY not set!")
-        print("     set ANTHROPIC_API_KEY=sk-ant-...")
+    if not os.environ.get("GROQ_API_KEY"):
+        print("  WARNING: GROQ_API_KEY not set!")
+        print("     set GROQ_API_KEY=gsk_...")
     else:
-        print("  API Key: OK")
+        print("  Groq API Key: OK")
     print(f"  Outputs: {OUTPUT_DIR}")
     print("  URL: http://localhost:5000")
     print("  User: Moshei1 | Pass: Admin2026")

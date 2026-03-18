@@ -34,7 +34,102 @@ try:
 except ImportError:
     MATPLOTLIB_OK = False
 
-# ── הגדרת כלים ─────────────────────────────────────
+# ── הגדרת כלים (פורמט Groq / OpenAI) ───────────────
+
+TOOLS_SCHEMA_GROQ = [
+    {
+        "type": "function",
+        "function": {
+            "name": "create_presentation",
+            "description": "יוצר מצגת PowerPoint מקצועית עם שקופיות, כותרות ונקודות.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "title":       {"type": "string"},
+                    "filename":    {"type": "string", "description": "שם קובץ ללא סיומת"},
+                    "theme_color": {"type": "string", "description": "צבע hex ראשי, ברירת מחדל #1F4E79"},
+                    "slides": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "heading": {"type": "string"},
+                                "bullets": {"type": "array", "items": {"type": "string"}},
+                                "notes":   {"type": "string"}
+                            },
+                            "required": ["heading", "bullets"]
+                        }
+                    }
+                },
+                "required": ["title", "filename", "slides"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_word_report",
+            "description": "יוצר דוח Word מקצועי עם כותרות, פסקאות וטבלאות.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "title":    {"type": "string"},
+                    "filename": {"type": "string"},
+                    "sections": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "heading": {"type": "string"},
+                                "content": {"type": "string"},
+                                "table": {
+                                    "type": "object",
+                                    "properties": {
+                                        "headers": {"type": "array", "items": {"type": "string"}},
+                                        "rows":    {"type": "array", "items": {"type": "array", "items": {"type": "string"}}}
+                                    }
+                                }
+                            },
+                            "required": ["heading", "content"]
+                        }
+                    }
+                },
+                "required": ["title", "filename", "sections"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_chart",
+            "description": "יוצר גרף סטטיסטי (עמודות/עוגה/קו) ושומר PNG.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "chart_type": {"type": "string", "enum": ["bar", "pie", "line", "barh"]},
+                    "title":      {"type": "string"},
+                    "filename":   {"type": "string"},
+                    "labels":     {"type": "array", "items": {"type": "string"}},
+                    "values":     {"type": "array", "items": {"type": "number"}},
+                    "xlabel":     {"type": "string"},
+                    "ylabel":     {"type": "string"},
+                    "colors":     {"type": "array", "items": {"type": "string"}}
+                },
+                "required": ["chart_type", "title", "filename", "labels", "values"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "recall_memory",
+            "description": "מחזיר את ההיסטוריה, הטעויות הקודמות והסטטיסטיקה של הסוכן.",
+            "parameters": {"type": "object", "properties": {}, "required": []}
+        }
+    }
+]
+
+# ── הגדרת כלים (פורמט Anthropic — לתאימות לאחור) ───
 
 TOOLS_SCHEMA = [
     {
